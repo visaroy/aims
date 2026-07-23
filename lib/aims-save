@@ -1,5 +1,11 @@
 #!/usr/bin/env bash
 set -euo pipefail
+script_dir="$(cd "$(dirname "$0")" && pwd)"
+. "$script_dir/aims-sentinel"
+for state in rebase-merge rebase-apply sequencer MERGE_HEAD CHERRY_PICK_HEAD REVERT_HEAD; do
+  state_path="$(git rev-parse --git-path "$state")"
+  [ ! -e "$state_path" ] || { echo "REFUSE: worktree has an active rebase/merge operation; finish or abort it before aims save." >&2; exit 1; }
+done
 branch="$(git branch --show-current)"
 [[ "$branch" == ai/* ]] || { echo "ERROR: aims save must run inside an ai/<session-id> worktree" >&2; exit 2; }
 sid="${branch#ai/}"
@@ -13,11 +19,63 @@ if ! git diff --cached --quiet; then
 else
   echo "INFO: nothing new to commit"
 fi
-git fetch -q origin "$branch" 2>/dev/null || true
-if ! git rev-parse --verify --quiet "origin/$branch" >/dev/null; then
-  git push -u origin "$branch"; echo "OK: branch published to origin"
-elif [ -n "$(git rev-list "origin/$branch..HEAD" 2>/dev/null)" ]; then
-  git push origin "$branch"; echo "OK: pushed to origin"       # ALWAYS push when ahead — publish reads origin, so local-only commits would be invisible.
-else
-  echo "OK: origin already up to date (nothing to push)"
+remote_ref="refs/remotes/origin/$branch"
+marker="refs/aims/rewrite/$sid"
+had_remote=0
+git rev-parse --verify --quiet "$remote_ref" >/dev/null && had_remote=1 || true
+git fetch --prune origin
+remote_oid=""
+git rev-parse --verify --quiet "$remote_ref" >/dev/null && remote_oid="$(git rev-parse "$remote_ref")" || true
+head_oid="$(git rev-parse HEAD)"
+marker_oid=""
+git rev-parse --verify --quiet "$marker" >/dev/null && marker_oid="$(git rev-parse "$marker")" || true
+published_oid=""
+published_oid="$(aims_sentinel_oid "$sid" 2>/dev/null || true)"
+clear_marker() { if [ -n "$marker_oid" ]; then git update-ref -d "$marker" "$marker_oid"; fi; }
+remember_published() { aims_sentinel_mark "$sid" "$1"; }
+if [ -z "$remote_oid" ]; then
+  if [ "$had_remote" = 1 ] || [ -n "$published_oid" ]; then
+    echo "REFUSE: origin/$branch disappeared after prior publication; not recreating a deleted session branch." >&2
+    exit 1
+  fi
+  [ -z "$marker_oid" ] || { echo "REFUSE: rewrite marker exists but origin/$branch is missing; refusing to recreate it." >&2; exit 1; }
+  aims_assert_remote_absent "$(git remote get-url origin)" "$branch"
+  git push --force-with-lease="refs/heads/$branch:$(aims_zero_oid)" -u origin "$branch"
+  remember_published "$head_oid"
+  echo "OK: branch published to origin"
+  exit 0
 fi
+remember_published "$remote_oid"
+if [ "$head_oid" = "$remote_oid" ]; then
+  clear_marker
+  echo "OK: origin already matches local HEAD (nothing to push)"
+  exit 0
+fi
+if git merge-base --is-ancestor "$remote_oid" "$head_oid"; then
+  git push --force-with-lease="refs/heads/$branch:$remote_oid" origin "$branch"
+  remember_published "$head_oid"
+  clear_marker
+  echo "OK: pushed fast-forward to origin"
+  exit 0
+fi
+if git merge-base --is-ancestor "$head_oid" "$remote_oid"; then
+  echo "REFUSE: local session branch is behind origin/$branch; refusing to overwrite the remote commit." >&2
+  exit 1
+fi
+[ -n "$marker_oid" ] || { echo "REFUSE: local and origin/$branch diverged without an AIMS rewrite marker; resolve the divergence explicitly." >&2; exit 1; }
+[ "$marker_oid" = "$remote_oid" ] || { echo "REFUSE: origin/$branch advanced after the rewrite marker was captured (expected $marker_oid, found $remote_oid); refusing to overwrite the concurrent writer." >&2; exit 1; }
+if ! git push --force-with-lease="refs/heads/$branch:$marker_oid" origin "$branch"; then
+  echo "ERROR: safe rewritten-session push was rejected; rewrite marker retained at $marker_oid." >&2
+  echo "Supported no-force recovery from this worktree:" >&2
+  echo "  git update-ref refs/aims/recovery/$sid HEAD" >&2
+  echo "  git fetch origin main" >&2
+  echo "  git reset --hard refs/aims/rewrite/$sid" >&2
+  echo "  git merge --no-commit --no-ff origin/main" >&2
+  echo "  git checkout refs/aims/recovery/$sid -- . && git add -A && git commit --no-edit" >&2
+  echo "  aims save" >&2
+  echo "  git update-ref -d refs/aims/recovery/$sid" >&2
+  exit 1
+fi
+remember_published "$head_oid"
+git update-ref -d "$marker" "$marker_oid"
+echo "OK: safely pushed rewritten session with exact lease"

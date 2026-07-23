@@ -1,0 +1,73 @@
+#!/usr/bin/env bash
+set -euo pipefail
+script_dir="$(cd "$(dirname "$0")" && pwd)"
+. "$script_dir/aims-sentinel"
+arg="${1:-}"
+[ -n "$arg" ] && [ $# -eq 1 ] || { echo "usage: aims rebase <session-id|ai/session-id>" >&2; exit 2; }
+repo="${AIMS_HOME:-$HOME/.aims}"
+branch="$arg"; [[ "$branch" == ai/* ]] || branch="ai/$arg"
+sid="${branch#ai/}"
+[[ "$sid" =~ ^[A-Za-z0-9._-]+$ ]] || { echo "ERROR: unsafe session id: $sid" >&2; exit 2; }
+wt="$repo/.worktrees/$sid"
+marker="refs/aims/rewrite/$sid"
+main_ref="refs/remotes/origin/main"
+remote_ref="refs/remotes/origin/$branch"
+[ -d "$wt" ] || { echo "ERROR: session worktree not found: $wt" >&2; exit 1; }
+git -C "$wt" remote get-url origin >/dev/null 2>&1 || { echo "ERROR: session worktree has no 'origin' remote — AIMS syncs sessions through origin." >&2; exit 1; }
+current_branch="$(git -C "$wt" branch --show-current)"
+[ "$current_branch" = "$branch" ] || { echo "ERROR: worktree $wt is not on $branch" >&2; exit 1; }
+[ -z "$(git -C "$wt" status --porcelain --untracked-files=all)" ] || { echo "REFUSE: worktree $wt is dirty; commit or discard changes before aims rebase." >&2; exit 1; }
+for state in rebase-merge rebase-apply sequencer MERGE_HEAD CHERRY_PICK_HEAD REVERT_HEAD; do
+  state_path="$(git -C "$wt" rev-parse --git-path "$state")"
+  [ ! -e "$state_path" ] || { echo "REFUSE: worktree $wt has an active rebase/merge operation; finish or abort it first." >&2; exit 1; }
+done
+if git -C "$wt" show-ref --verify --quiet "$marker"; then
+  echo "REFUSE: rewrite marker already exists for $sid ($marker); run aims save or inspect the active rewrite before retrying." >&2
+  exit 1
+fi
+echo "Fetching origin/$branch..." >&2
+git -C "$wt" fetch --prune origin "$branch"
+git -C "$wt" show-ref --verify --quiet "$remote_ref" || { echo "ERROR: origin/$branch was not fetched; the session branch may be missing." >&2; exit 1; }
+remote_oid="$(git -C "$wt" rev-parse "$remote_ref")"
+head_oid="$(git -C "$wt" rev-parse HEAD)"
+[ "$head_oid" = "$remote_oid" ] || { echo "REFUSE: local HEAD $head_oid does not exactly match freshly fetched origin/$branch $remote_oid; do not overwrite an unsynchronized session." >&2; exit 1; }
+aims_sentinel_mark_at "$wt" "$sid" "$remote_oid"
+git -C "$wt" update-ref "$marker" "$remote_oid"
+echo "Fetching origin/main..." >&2
+if ! git -C "$wt" fetch --prune origin main; then
+  echo "ERROR: origin/main fetch failed; rewrite marker retained at $remote_oid." >&2
+  exit 1
+fi
+git -C "$wt" show-ref --verify --quiet "$main_ref" || { echo "ERROR: origin/main was not fetched; rewrite marker retained at $remote_oid." >&2; exit 1; }
+if git -C "$wt" rebase "$main_ref"; then
+  rebased_oid="$(git -C "$wt" rev-parse HEAD)"
+  if [ "$rebased_oid" = "$remote_oid" ]; then
+    git -C "$wt" update-ref -d "$marker" "$remote_oid"
+    echo "OK: rebase of $sid was a no-op; rewrite marker cleared."
+  else
+    echo "OK: rebased $sid onto origin/main; rewrite marker retained for the exact lease."
+    echo "Next: run 'aims save' in $wt."
+  fi
+else
+  active=0
+  for state in rebase-merge rebase-apply sequencer MERGE_HEAD CHERRY_PICK_HEAD REVERT_HEAD; do
+    state_path="$(git -C "$wt" rev-parse --git-path "$state")"
+    [ ! -e "$state_path" ] || active=1
+  done
+  if [ "$active" = 1 ]; then
+    echo "ERROR: rebase of $sid stopped with an active conflict; rewrite marker retained at $remote_oid." >&2
+    echo "Resolve conflicts, then run 'git -C \"$wt\" rebase --continue' and 'aims save'." >&2
+    echo "To abandon the rewrite, run 'git -C \"$wt\" rebase --abort', then 'aims save' to clear the no-op marker." >&2
+  elif [ "$(git -C "$wt" rev-parse HEAD)" = "$remote_oid" ]; then
+    if git -C "$wt" update-ref -d "$marker" "$remote_oid"; then
+      echo "ERROR: rebase of $sid could not start; HEAD is unchanged and no resumable operation exists. Rewrite marker cleared." >&2
+    else
+      echo "ERROR: rebase of $sid failed before starting and the rewrite marker changed concurrently; refusing to clear it." >&2
+    fi
+  elif git -C "$wt" update-ref -d "$marker" "$remote_oid"; then
+    echo "ERROR: rebase of $sid stopped without a resumable conflict; rewrite marker cleared. Inspect the worktree before saving." >&2
+  else
+    echo "ERROR: rebase of $sid stopped without a resumable conflict and the rewrite marker changed concurrently; refusing to clear it." >&2
+  fi
+  exit 1
+fi

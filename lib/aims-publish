@@ -20,18 +20,29 @@ if [ -d "$agent_wt" ]; then                                    # guard: publish 
     echo "REFUSE: worktree $agent_wt has commits NOT pushed to origin. Run 'aims save' (publish merges the origin state)." >&2; exit 1
   fi
 fi
-cleanup_fail() {  # on merge/push failure: leave the repo clean + tell the agent what to do
+cleanup_publish() {  # on merge/push failure: leave the temporary publish worktree clean
   git -C "$pub" merge --abort 2>/dev/null || true
   git -C "$repo" worktree remove "$pub" --force 2>/dev/null || true
   git -C "$repo" branch -D "publish/$sid" 2>/dev/null || true
-  echo "ERROR: publish failed for $sid. Fix: in your worktree run 'git fetch origin main && git rebase origin/main', resolve conflicts, 'aims save', then retry aims publish." >&2
+}
+merge_fail() {
+  cleanup_publish
+  echo "ERROR: session merge conflict while publishing $sid." >&2
+  echo "Run 'aims rebase $sid' in the session worktree, resolve conflicts, run 'aims save', then retry 'aims publish $sid'." >&2
+  exit 1
+}
+main_push_fail() {
+  cleanup_publish
+  echo "ERROR: publish could not update main (another publisher may have won a race)." >&2
+  echo "Retry 'aims publish $sid'; if the session merge itself conflicts, use 'aims rebase $sid', then 'aims save'." >&2
+  echo "If origin rejects a rewritten-session force push, in the session worktree save HEAD at refs/aims/recovery/$sid, reset to refs/aims/rewrite/$sid, merge origin/main and the recovery ref, then run aims save." >&2
   exit 1
 }
 git -C "$repo" fetch origin main "$branch"
 rm -rf "$pub"
 git -C "$repo" worktree add "$pub" -b "publish/$sid" origin/main
 pub_base="$(git -C "$pub" rev-parse HEAD)"   # base to detect an "empty" merge
-git -C "$pub" merge --no-ff "origin/$branch" -m "📝 session: merge $sid" || cleanup_fail
+git -C "$pub" merge --no-ff "origin/$branch" -m "📝 session: merge $sid" || merge_fail
 if [ -z "$(git -C "$pub" diff --name-only "$pub_base" HEAD)" ]; then    # guard: an empty merge used to look like success.
   echo "WARNING: merge of $sid brought NO file changes — the session may not have pushed its work (aims save?). Verify before treating it as published." >&2
 fi
@@ -43,7 +54,7 @@ if [ -f "$pub/sessions/work/$sid/metadata.json" ] && ! grep -q "$sid" "$pub/SESS
   printf '| %s | %s | %s | %s | %s | sessions/work/%s/ | — | done |\n' "$snn" "${started:0:10}" "${started:11:5}" "$proj" "$topic" "$sid" >> "$pub/SESSIONS.md"
   git -C "$pub" add SESSIONS.md && git -C "$pub" commit -m "📝 registry: $snn $sid" -q
 fi
-AIMS_PUBLISH=1 git -C "$pub" push origin HEAD:main || cleanup_fail
+AIMS_PUBLISH=1 git -C "$pub" push origin HEAD:main || main_push_fail
 git -C "$repo" push origin --delete "$branch" || true
 echo "--- merged to main (full session diff, not just the registry row):"
 git -C "$pub" diff --stat "$pub_base" HEAD 2>/dev/null | tail -25 || true

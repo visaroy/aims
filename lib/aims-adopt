@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
+if [ -n "${AIMS_ROOT:-}" ]; then AIMS_LIB="$AIMS_ROOT/lib"; else AIMS_LIB="$(cd "$(dirname "$0")" && pwd)"; fi
+. "$AIMS_LIB/aims-sentinel"
 arg="${1:-}"                                                                          # aims adopt <session-id|ai/session-id> [--remote]
 [ -n "$arg" ] || { echo "usage: aims adopt <session-id> [--remote]" >&2; exit 2; }
 remote=0; [ "${2:-}" = "--remote" ] && remote=1                                       # --remote = report only, do NOT create a local worktree (work stays on the session host)
@@ -9,6 +11,7 @@ sid="${branch#ai/}"
 [[ "$sid" =~ ^[A-Za-z0-9._-]+$ ]] || { echo "ERROR: unsafe session id: $sid" >&2; exit 2; }
 wt="$repo/.worktrees/$sid"
 git -C "$repo" fetch -q origin main "$branch" 2>/dev/null || { echo "ERROR: no branch origin/$branch (wrong session id?)" >&2; exit 1; }
+remote_oid="$(git -C "$repo" rev-parse "origin/$branch")"
 ahead=$(git -C "$repo" rev-list --count "origin/$branch" ^origin/main)
 [ "$ahead" = "0" ] && { echo "REFUSE: $sid is already merged to main (0 commits ahead) — nothing to adopt." >&2; exit 1; }
 age_min=$(( ( $(date -u +%s) - $(git -C "$repo" log -1 --format=%ct "origin/$branch") ) / 60 ))   # freshness of the branch tip
@@ -100,11 +103,26 @@ if [ "$remote" = 1 ]; then
   echo "  --- --remote MODE: no local worktree created. Work directly in the worktree on the session host. ---"
   sep; exit 0
 fi
-if [ -d "$wt" ]; then echo "INFO: worktree already exists: $wt"; else git -C "$repo" worktree add "$wt" "$branch"; fi
+aims_sentinel_mark_at "$repo" "$sid" "$remote_oid"
+if [ -d "$wt" ]; then
+  echo "INFO: worktree already exists: $wt"
+else
+  if git -C "$repo" show-ref --verify --quiet "refs/heads/$branch"; then
+    aims_assert_observed_ancestor "$branch" "$remote_oid" "$(git -C "$repo" rev-parse "refs/heads/$branch")"
+  fi
+  git -C "$repo" worktree add "$wt" "$branch"
+fi
+current_branch="$(git -C "$wt" branch --show-current)"
+[ "$current_branch" = "$branch" ] || { echo "REFUSE: adopt worktree $wt is on $current_branch, expected $branch; no files were edited." >&2; exit 1; }
+aims_assert_observed_ancestor "$branch" "$remote_oid" "$(git -C "$wt" rev-parse HEAD)"
 wl="$wt/sessions/work/$sid/worklog.md"
 adopter="${AIMS_AGENT:-$(whoami)}@$(hostname -s)"
 printf '\n- ADOPTED %s by %s — continuing from ARTIFACTS (git+worklog), NOT from the previous agent context.\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$adopter" >> "$wl"
-git -C "$wt" add "sessions/work/$sid/worklog.md" >/dev/null 2>&1 || true
-git -C "$wt" -c user.name="${AIMS_GIT_NAME:-AIMS Agent}" -c user.email="${AIMS_GIT_EMAIL:-aims@localhost}" commit -q -m "🔄 session: adopt $sid by $adopter" || true
-git -C "$wt" push -q origin "$branch" || true
+git -C "$wt" add "sessions/work/$sid/worklog.md" || { echo "ERROR: adopt checkpoint staging failed; worktree retained at $wt." >&2; exit 1; }
+git -C "$wt" -c user.name="${AIMS_GIT_NAME:-AIMS Agent}" -c user.email="${AIMS_GIT_EMAIL:-aims@localhost}" commit -q -m "🔄 session: adopt $sid by $adopter" || { echo "ERROR: adopt checkpoint commit failed; worktree retained at $wt." >&2; exit 1; }
+if ! git -C "$wt" push -q --force-with-lease="refs/heads/$branch:$remote_oid" origin "$branch"; then
+  echo "ERROR: adopt checkpoint push failed; the remote session branch may have advanced. Worktree retained at $wt; inspect the race and run 'aims save'." >&2
+  exit 1
+fi
+aims_sentinel_mark_at "$wt" "$sid" "$(git -C "$wt" rev-parse HEAD)"
 sep; echo "OK: adopted. Work in: $wt (branch $branch). Close with: aims publish $sid"; sep
