@@ -43,8 +43,7 @@ Install AIMS from its official public repository: https://github.com/visaroy/aim
 4. Report what you reviewed, the security summary, which agent config files were changed (and
    where the backups are), and the final `aims doctor` output.
 
-To update AIMS later, re-run the same one-command install — it fast-forwards the engine and
-refreshes the agent rules block in place.
+To update AIMS later, run `cd ~/aims && bash install.sh`: it prints `🔄 Pobieram aktualizację AIMS z oficjalnego repozytorium GitHub…`, performs only a fast-forward update from `origin/main`, then refreshes the command link. It refuses an engine checkout with local changes or a non-`main` branch rather than overwriting work.
 ```
 
 Running this on more than one machine, each pointed at the **same** private data repo, is the whole
@@ -112,8 +111,7 @@ curl -fsSL https://raw.githubusercontent.com/visaroy/aims/main/bootstrap.sh | ba
 This: installs the engine to `~/aims`, links the `aims` command, creates your private data repo
 (`~/.aims`), and **teaches every installed agent to understand AIMS** by writing an AIMS rules block
 into their config files (`~/AGENTS.md`, `~/.codex/AGENTS.md`, `~/.claude/CLAUDE.md`, `~/.gemini/GEMINI.md`).
-Re-running is safe — it refreshes the block in place. **This is also how you update AIMS:** re-run
-the same command and it fast-forwards the engine and refreshes the rules.
+For a later engine-only update, run `cd ~/aims && bash install.sh`: it announces the official-repository update and performs `fetch` + `merge --ff-only origin/main` before refreshing the link. It refuses local engine changes and non-`main` branches, so it cannot overwrite unfinished engine work.
 
 Then point AIMS at your data repo and give it a remote so sessions sync across machines:
 
