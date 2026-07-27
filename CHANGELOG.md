@@ -1,5 +1,8 @@
 # Changelog
 
+## Unreleased
+- Added an English comparison of AIMS and Softaworks Agent Toolkit session handoff practices, plus a documented AIMS roadmap for handoff readiness and adoption diagnostics.
+
 ## 0.6.0 — 2026-07-27
 - Added `aims checkpoint <session-id>|--all`, targeted `aims handoff <session-id>`, and `aims handoff-all [--yes]` for explicit session preservation and cross-machine transfer through origin.
 - Secret scanning now includes untracked, non-ignored files and runs on macOS Bash 3.2 without parser failures.

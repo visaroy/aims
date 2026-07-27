@@ -85,7 +85,7 @@ moves the **work** across machines and across tools:
 | Medium | ⚠️ local `.jsonl` (not synced) | ✅ branch on `origin` |
 | codex / opencode / gemini | ❌ N/A | ✅ works |
 
-Full breakdown across all tools: [`docs/COMPARISON.md`](docs/COMPARISON.md).
+Full breakdown across all tools: [`docs/COMPARISON.md`](docs/COMPARISON.md). A focused comparison with Softaworks Agent Toolkit's session-handoff skill: [`docs/SESSION-HANDOFF-COMPARISON.md`](docs/SESSION-HANDOFF-COMPARISON.md).
 
 ---
 
@@ -177,9 +177,9 @@ aims publish <session-id>                        # merge to main, register, done
 | `aims wire-agents` | (Re)write the AIMS rules into agent config files |
 | `aims doctor` | Health-check engine + data repo |
 
-See [`docs/COMMANDS.md`](docs/COMMANDS.md), [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md), and
-[`docs/AIMS.md`](docs/AIMS.md), and [`docs/AGENTS-MEMORY.md`](docs/AGENTS-MEMORY.md)
-(sharing rules & work across agents). **Documentation language:** English is official; translations under
+See [`docs/COMMANDS.md`](docs/COMMANDS.md), [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md),
+[`docs/AIMS.md`](docs/AIMS.md), [`docs/AGENTS-MEMORY.md`](docs/AGENTS-MEMORY.md), and the
+[session handoff roadmap](docs/TODO.md). **Documentation language:** English is official; translations under
 [`docs/i18n/`](docs/i18n/).
 
 ## Guarantees & guards
