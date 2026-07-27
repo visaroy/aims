@@ -9,8 +9,8 @@ git -C "$ENGINE" branch -M main
 git -C "$ENGINE" remote set-url origin "$REMOTE"
 git -C "$ENGINE" config user.name 'AIMS Test'
 git -C "$ENGINE" config user.email 'aims-test@example.invalid'
-cp "$ROOT/install.sh" "$ENGINE/install.sh"
-git -C "$ENGINE" add install.sh && git -C "$ENGINE" commit -q -m 'test install script'
+printf 'baseline\n' > "$ENGINE/baseline.txt"
+git -C "$ENGINE" add baseline.txt && git -C "$ENGINE" commit -q -m 'test baseline'
 git -C "$ENGINE" push -q -u origin main
 git clone -q "$REMOTE" "$UPDATER"
 git -C "$UPDATER" config user.name 'AIMS Test'
