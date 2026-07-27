@@ -3,7 +3,7 @@
 **AI Multi-agent Sessions** — git-native session management for AI coding agents,
 across many machines and many agents.
 
-![status](https://img.shields.io/badge/status-alpha-orange) ![license](https://img.shields.io/badge/license-MIT-blue) ![shell](https://img.shields.io/badge/shell-bash-121011)
+![Version](https://img.shields.io/badge/Version-v0.6.0-blue) ![Last Update](https://img.shields.io/badge/Update-2026--07--27-orange) ![status](https://img.shields.io/badge/status-alpha-orange) ![license](https://img.shields.io/badge/license-MIT-blue) ![shell](https://img.shields.io/badge/shell-bash-121011)
 
 AIMS turns each unit of AI work into a **git branch in an isolated worktree**. Sessions can be
 **handed off** between machines and **adopted** by any agent — because the source of truth is a
@@ -43,7 +43,7 @@ Install AIMS from its official public repository: https://github.com/visaroy/aim
 4. Report what you reviewed, the security summary, which agent config files were changed (and
    where the backups are), and the final `aims doctor` output.
 
-To restore/update AIMS later, run `cd ~/aims && bash install.sh`: it prints `🔄 Pobieram świeżą, oryginalną wersję AIMS z oficjalnego repozytorium GitHub…`, fetches `origin/main`, then runs `git reset --hard origin/main` and `git clean -ffdx` before refreshing the command link. It deliberately deletes every local tracked, untracked, and ignored engine file (including nested worktrees such as `.slim/`) so `~/aims` is an exact official checkout; it still refuses a non-`main` branch.
+To restore/update AIMS later, run `cd ~/aims && bash install.sh`: it prints `🔄 Restoring a fresh, official AIMS version from the official GitHub repository…`, fetches `origin/main`, then runs `git reset --hard origin/main` and `git clean -ffdx` before refreshing the command link. It deliberately deletes every local tracked, untracked, and ignored engine file (including nested worktrees such as `.slim/`) so `~/aims` is an exact official checkout; it still refuses a non-`main` branch.
 ```
 
 Running this on more than one machine, each pointed at the **same** private data repo, is the whole

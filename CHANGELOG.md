@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.6.0 — 2026-07-27
+- Added `aims checkpoint <session-id>|--all`, targeted `aims handoff <session-id>`, and `aims handoff-all [--yes]` for explicit session preservation and cross-machine transfer through origin.
+- Secret scanning now includes untracked, non-ignored files and runs on macOS Bash 3.2 without parser failures.
+- `install.sh` restores the exact official `origin/main` engine and removes local engine state, including nested worktrees, before refreshing the command link.
+
 ## 0.5.8 — 2026-07-20
 - init now installs the pre-push guard automatically, plus a new `aims install-hooks` command to (re)install it on an existing data repo — the "direct push to main is blocked" guarantee is now actually enforced on a fresh install, not just documented.
 - pre-push hook allows the initial creation of main (seeding a new remote) and blocks only direct pushes to an existing main.

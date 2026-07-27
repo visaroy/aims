@@ -23,7 +23,7 @@ mkdir -p "$ENGINE/.slim/worktrees/saved-worktree"
 printf 'local Slim state\n' > "$ENGINE/.slim/worktrees/saved-worktree/state.txt"
 git -C "$ENGINE/.slim/worktrees/saved-worktree" init -q
 output="$(HOME="$HOME_DIR" PATH="$PATH" bash "$ENGINE/install.sh")"
-printf '%s\n' "$output" | grep -F '🔄 Pobieram świeżą, oryginalną wersję AIMS z oficjalnego repozytorium GitHub…'
+printf '%s\n' "$output" | grep -F '🔄 Restoring a fresh, official AIMS version from the official GitHub repository…'
 test "$(git -C "$ENGINE" show HEAD:update-marker.txt)" = updated
 test ! -e "$ENGINE/local-change.txt"
 test ! -e "$ENGINE/.slim"
