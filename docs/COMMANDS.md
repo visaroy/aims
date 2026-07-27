@@ -14,9 +14,34 @@ Creates branch `ai/<id>` + worktree from `origin/main`, seeds `metadata.json` (i
 `git add -A` (whole worktree) + commit + **push when the branch is ahead of origin**. Never leaves
 work stranded.
 
-### `aims handoff [note]`  *(inside a worktree, user-triggered)*
-Guarantees `origin` has the complete session, sets `status=handoff`, does not merge to main. Say it
-when you switch machines.
+### `aims handoff [note]`  *(inside a worktree)*
+Guarantees `origin` has the complete session, sets `status=handoff`, and does not merge to main.
+
+### `aims handoff <session-id>`  *(from `AIMS_HOME/.worktrees/`)*
+Selects one local session by ID, then performs the same validated handoff from its worktree. It refuses a missing/mismatched worktree or metadata; it does not publish, merge, delete, reset, or force-push.
+
+### `aims handoff-all [--yes]`  *(from `AIMS_HOME`)*
+Finds valid local AIMS worktrees and hands each off. Without `--yes`, requires an interactive `HANDOFF` confirmation. It runs the secret scanner before each session, leaves every worktree in place, and reports blocked sessions without publishing them.
+
+**Step 1: run the handoff on Mac**
+
+From the local worktree directory, select exactly one session:
+
+```bash
+cd ~/.AI/.worktrees
+aims handoff 20260727T141115Z-meta-aims-bulk-handoff-recovery-and-checkpointing-hermes
+```
+
+AIMS validates the matching branch and metadata, scans for secrets, commits and pushes the complete session, then sets `status=handoff`. It pauses the session; it does not merge it into `main` or delete its worktree.
+
+**Step 2: adopt it on the other machine**
+
+```bash
+cd ~/.AI
+aims adopt 20260727T141115Z-meta-aims-bulk-handoff-recovery-and-checkpointing-hermes
+```
+
+Only after the work is verified and actually complete should `aims publish <session-id>` be used.
 
 ### `aims adopt <session-id> [--remote]`
 Fetches from origin, prints an **adoption report** (environment + host probe + recommendation),

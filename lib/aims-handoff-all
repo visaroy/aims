@@ -1,0 +1,53 @@
+#!/usr/bin/env bash
+set -euo pipefail
+repo="${AIMS_HOME:-$HOME/.aims}"
+confirm="${1:-}"
+[ "$#" -le 1 ] && { [ -z "$confirm" ] || [ "$confirm" = --yes ]; } || { echo "usage: aims handoff-all [--yes]" >&2; exit 2; }
+git -C "$repo" rev-parse --is-inside-work-tree >/dev/null 2>&1 || { echo "ERROR: AIMS data repo not found: $repo" >&2; exit 1; }
+git -C "$repo" remote get-url origin >/dev/null 2>&1 || { echo "ERROR: AIMS data repo has no origin; refusing to hand off local-only work" >&2; exit 1; }
+lib="${AIMS_ROOT:-$(cd "$(dirname "$0")/.." && pwd)}/lib"
+worktrees=()
+current=""; branch=""
+process_worktree() {
+  [ -n "$current" ] || return 0
+  case "$current" in "$repo"/.worktrees/*) ;; *) return 0;; esac
+  case "$branch" in refs/heads/ai/*) ;; *) return 0;; esac
+  sid="${branch#refs/heads/ai/}"
+  [ -f "$current/sessions/work/$sid/metadata.json" ] || { printf 'SKIP: %s missing session metadata\n' "$current" >&2; return 0; }
+  worktrees+=("$current")
+}
+while IFS= read -r line || [ -n "$line" ]; do
+  case "$line" in
+    'worktree '*) process_worktree; current="${line#worktree }"; branch="";;
+    'branch '*) branch="${line#branch }";;
+    '') process_worktree; current=""; branch="";;
+  esac
+done < <(git -C "$repo" worktree list --porcelain)
+process_worktree
+[ "${#worktrees[@]}" -gt 0 ] || { echo "INFO: no valid AIMS session worktrees under $repo/.worktrees"; exit 0; }
+printf 'Found %s local AIMS session worktree(s). This saves, pushes, and marks them HANDOFF; it does not publish, merge, delete, reset, or force-push.\n' "${#worktrees[@]}"
+if [ "$confirm" != --yes ]; then
+  if [ ! -r /dev/tty ]; then echo "ERROR: no interactive terminal; rerun with --yes after reviewing the worktrees" >&2; exit 2; fi
+  printf 'Type HANDOFF to continue: ' >/dev/tty
+  read -r answer </dev/tty || answer=""
+  [ "$answer" = HANDOFF ] || { echo "Aborted."; exit 1; }
+fi
+failed=0
+for wt in "${worktrees[@]}"; do
+  branch="$(git -C "$wt" branch --show-current)"; sid="${branch#ai/}"
+  if ! (cd "$wt" && "$lib/validate-no-secrets.sh") >/dev/null; then
+    printf 'HANDOFF_BLOCKED %s secret scan failed\n' "$sid" >&2; failed=1; continue
+  fi
+  if (cd "$wt" && AIMS_ROOT="${AIMS_ROOT:-$(cd "$(dirname "$0")/.." && pwd)}" "$lib/aims-handoff" "bulk handoff from $(hostname -s)"); then
+    git -C "$repo" fetch -q origin "$branch"
+    if [ "$(git -C "$wt" rev-parse HEAD)" = "$(git -C "$repo" rev-parse "origin/$branch")" ]; then
+      printf 'HANDOFF_OK %s\n' "$sid"
+    else
+      printf 'HANDOFF_BLOCKED %s origin verification failed\n' "$sid" >&2; failed=1
+    fi
+  else
+    printf 'HANDOFF_BLOCKED %s handoff failed\n' "$sid" >&2; failed=1
+  fi
+done
+[ "$failed" -eq 0 ] && echo "OK: all eligible sessions are safely handed off and ready for aims adopt on another machine."
+exit "$failed"

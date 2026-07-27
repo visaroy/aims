@@ -158,6 +158,7 @@ aims start myproject "fix login bug" claude    # new branch + worktree
 cd ~/.aims/.worktrees/<session-id>             # agent works here
 aims save                                       # checkpoint: commit whole worktree + push
 aims handoff "waiting on CI"                     # hand to another machine (pushes everything)
+# Or, from ~/.aims/.worktrees: aims handoff <session-id>
 aims adopt <session-id>                          # (elsewhere) take it over from origin
 aims publish <session-id>                        # merge to main, register, done
 ```
@@ -168,6 +169,8 @@ aims publish <session-id>                        # merge to main, register, done
 | `aims start <proj> <topic> [agent] [--scope ...]` | Start a session |
 | `aims save` | Checkpoint: commit the whole worktree + push |
 | `aims handoff [note]` | Hand session to another machine/agent |
+| `aims handoff <session-id>` | Hand off one local session from `.worktrees/` |
+| `aims handoff-all [--yes]` | Hand off all valid local worktrees |
 | `aims adopt <id> [--remote]` | Take over a session from origin |
 | `aims publish <id>` | Merge to main, append registry, delete branch |
 | `aims list` | Active sessions with age / scope / STALE flag |

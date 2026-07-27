@@ -1,11 +1,16 @@
 #!/usr/bin/env bash
 set -euo pipefail
-# Run INSIDE a session worktree, on the USER's request ("hand off the session"), when switching to
-# another machine/agent. Guarantees origin has the COMPLETE session work and marks it as handed off
-# (status=handoff) so aims adopt on the other side knows it is safe to take over.
-# Does NOT merge to main (this is a pause with handover, not the end). Close with aims publish.
+# Run inside a session worktree, or from AIMS_HOME/.worktrees as `aims handoff <session-id>`.
+# Guarantees origin has the COMPLETE session work and marks it as handed off; it never merges to main.
 branch="$(git branch --show-current)"
-[[ "$branch" == ai/* ]] || { echo "ERROR: aims handoff must run inside an ai/<session-id> worktree" >&2; exit 2; }
+if [[ "$branch" != ai/* && "${1:-}" =~ ^[A-Za-z0-9._-]+$ ]]; then
+  requested="$1"; repo="${AIMS_HOME:-$HOME/.aims}"; target="$repo/.worktrees/$requested"
+  [ -d "$target" ] || { echo "ERROR: no local AIMS worktree for session $requested" >&2; exit 2; }
+  [ "$(git -C "$target" branch --show-current)" = "ai/$requested" ] || { echo "ERROR: worktree branch does not match session $requested" >&2; exit 2; }
+  [ -f "$target/sessions/work/$requested/metadata.json" ] || { echo "ERROR: missing session metadata for $requested" >&2; exit 2; }
+  shift; cd "$target"; exec "$0" "$@"
+fi
+[[ "$branch" == ai/* ]] || { echo "ERROR: aims handoff must run inside an ai/<session-id> worktree or from AIMS_HOME/.worktrees with a session id" >&2; exit 2; }
 sid="${branch#ai/}"
 [[ "$sid" =~ ^[A-Za-z0-9._-]+$ ]] || { echo "ERROR: unsafe session id: $sid" >&2; exit 2; }
 git remote get-url origin >/dev/null 2>&1 || { echo "ERROR: handoff needs an 'origin' remote — it pushes the session so another machine can adopt it. Add one:" >&2; echo "  git remote add origin <url> && git push -u origin main" >&2; exit 1; }
