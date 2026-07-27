@@ -171,6 +171,7 @@ aims publish <session-id>                        # merge to main, register, done
 | `aims handoff [note]` | Hand session to another machine/agent |
 | `aims handoff <session-id>` | Hand off one local session from `.worktrees/` |
 | `aims handoff-all [--yes]` | Hand off all valid local worktrees |
+| `aims checkpoint <id>\|--all` | Commit and push local sessions without handoff |
 | `aims adopt <id> [--remote]` | Take over a session from origin |
 | `aims publish <id>` | Merge to main, append registry, delete branch |
 | `aims list` | Active sessions with age / scope / STALE flag |

@@ -1,0 +1,28 @@
+#!/usr/bin/env bash
+set -euo pipefail
+repo="${AIMS_HOME:-$HOME/.aims}"
+sid="${1:-}"
+lib="${AIMS_ROOT:-$(cd "$(dirname "$0")/.." && pwd)}/lib"
+if [ "$sid" = --all ]; then
+  [ "$#" -eq 1 ] || { echo "usage: aims checkpoint --all" >&2; exit 2; }
+  [ -d "$repo/.worktrees" ] || { echo "INFO: no local AIMS worktrees"; exit 0; }
+  failed=0; found=0
+  while IFS= read -r -d '' target; do
+    branch="$(git -C "$target" branch --show-current 2>/dev/null || true)"
+    case "$branch" in ai/*) ;; *) continue;; esac
+    candidate="${branch#ai/}"
+    [ -f "$target/sessions/work/$candidate/metadata.json" ] || continue
+    found=$((found + 1))
+    "$0" "$candidate" || failed=1
+  done < <(find "$repo/.worktrees" -mindepth 1 -maxdepth 1 -type d -print0)
+  [ "$found" -gt 0 ] || { echo "INFO: no valid local AIMS session worktrees"; exit 0; }
+  exit "$failed"
+fi
+[ "$#" -eq 1 ] && [[ "$sid" =~ ^[A-Za-z0-9._-]+$ ]] || { echo "usage: aims checkpoint <session-id>|--all" >&2; exit 2; }
+target="$repo/.worktrees/$sid"
+[ -d "$target" ] || { echo "ERROR: no local AIMS worktree for session $sid" >&2; exit 2; }
+[ "$(git -C "$target" branch --show-current)" = "ai/$sid" ] || { echo "ERROR: worktree branch does not match session $sid" >&2; exit 2; }
+[ -f "$target/sessions/work/$sid/metadata.json" ] || { echo "ERROR: missing session metadata for $sid" >&2; exit 2; }
+lib="${AIMS_ROOT:-$(cd "$(dirname "$0")/.." && pwd)}/lib"
+(cd "$target" && "$lib/validate-no-secrets.sh" && "$lib/aims-save")
+printf 'CHECKPOINT_OK %s\n' "$sid"

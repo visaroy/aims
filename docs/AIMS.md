@@ -60,6 +60,7 @@ dla codex/opencode/gemini, przywiązana do jednej maszyny).
 | `aims handoff [notka]` | w worktree | **Przekazanie maszyny** (polecenie USERA). `git add -A` (KOMPLET), commit, push, `status=handoff`. NIE scala do main. |
 | `aims handoff <sid>` | `$AIMS_HOME/.worktrees/` | Przekazanie jednej wskazanej lokalnej sesji bez ręcznego `cd` do jej katalogu. Waliduje, że worktree, branch `ai/<sid>` i metadata są zgodne, następnie wykonuje zwykły handoff. |
 | `aims handoff-all [--yes]` | `$AIMS_HOME` | Przekazanie wszystkich prawidłowych lokalnych worktree’ów. Domyślnie pyta o wpisanie `HANDOFF`; `--yes` jest dla świadomej automatyzacji. NIE scala, nie usuwa worktree’ów i nie force-pushuje. |
+| `aims checkpoint <sid>\|--all` | `$AIMS_HOME` | Bezpieczny checkpoint: skan sekretów, commit i push bez zmiany statusu sesji. Przeznaczony jako jawny cel dla user-level timera systemd lub LaunchAgent, bez samoczynnej instalacji usługi. |
 | `aims adopt <sid> [--remote]` | `$AIMS_HOME` (dowolna maszyna) | Przejęcie z origin: raport środowiska + guardy, worktree z istniejącej gałęzi, wpis ADOPTED. `--remote` = tylko raport. |
 | `aims publish <sid>` | `$AIMS_HOME` | Domknięcie: merge gałęzi → main, wpis rejestru `sNNN`, usunięcie gałęzi z origin. Działa niezależnie od tego, który agent zaczął. |
 | `aims list` | `$AIMS_HOME` | Aktywne gałęzie `ai/*` z wiekiem, scope i flagą STALE (>48h). |

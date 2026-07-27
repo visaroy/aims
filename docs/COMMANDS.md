@@ -43,6 +43,9 @@ aims adopt 20260727T141115Z-meta-aims-bulk-handoff-recovery-and-checkpointing-he
 
 Only after the work is verified and actually complete should `aims publish <session-id>` be used.
 
+### `aims checkpoint <session-id>|--all`  *(from `AIMS_HOME`)*
+Commits and pushes one selected local session, or every valid local session with `--all`, without changing its `active`/`handoff` status. It scans for secrets before staging. This is the primitive intended for an opt-in systemd user timer or macOS LaunchAgent; scheduling remains external so AIMS does not install a background service without explicit user consent.
+
 ### `aims adopt <session-id> [--remote]`
 Fetches from origin, prints an **adoption report** (environment + host probe + recommendation),
 creates a worktree from the existing branch, logs the takeover. `--remote` = report only. Refuses a
