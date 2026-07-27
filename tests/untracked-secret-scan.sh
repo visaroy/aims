@@ -7,7 +7,7 @@ git -C "$TMP/repo" config user.name 'AIMS Test'
 git -C "$TMP/repo" config user.email 'aims-test@example.invalid'
 printf 'tracked safe content\n' > "$TMP/repo/tracked.txt"
 git -C "$TMP/repo" add tracked.txt && git -C "$TMP/repo" commit -q -m init
-printf 'token=ghp_abcdefghijklmnopqrstuvwxyz1234567890\n' > "$TMP/repo/untracked-secret.txt"
+printf 'token=ghp_%s\n' 'abcdefghijklmnopqrstuvwxyz1234567890' > "$TMP/repo/untracked-secret.txt"
 if (cd "$TMP/repo" && "$ROOT/lib/validate-no-secrets.sh") >/dev/null 2>&1; then
   echo 'FAIL: untracked secret was not rejected' >&2; exit 1
 fi

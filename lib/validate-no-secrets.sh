@@ -21,15 +21,17 @@ patterns=(
 # same line) and would mask them. Extend only with strings that are never a real value.
 placeholder='tutaj-twoj-klucz|twoj-klucz|your[_-]api[_-]key|YOUR_API_KEY|<your|changeme|CHANGEME|CHANGE_ME|placeholder|PLACEHOLDER|ZREDAGOWANE|\$\{|xxxxxxxx|XXXXXXXX'
 fail=0
+scan_file="$(mktemp "${TMPDIR:-/tmp}/aims-secret-scan.XXXXXX")"
+trap 'rm -f "$scan_file"' EXIT
 for pat in "${patterns[@]}"; do
-  hits="$({
-    git grep -InE "$pat" -- ':!secrets/*.example' ':!secrets/README.md' 2>/dev/null || true
-    while IFS= read -r -d '' file; do
-      case "$file" in secrets/*.example|secrets/README.md) continue;; esac
-      [ -f "$file" ] || continue
-      while IFS= read -r match; do printf '%s:%s\n' "$file" "$match"; done < <(grep -InE "$pat" -- "$file" 2>/dev/null || true)
-    done < <(git ls-files --others --exclude-standard -z)
-  } | grep -Ev "$placeholder" || true)"  # scan tracked and unstaged files, then drop placeholders
+  : > "$scan_file"
+  git grep -InE "$pat" -- ':!secrets/*.example' ':!secrets/README.md' > "$scan_file" 2>/dev/null || true
+  while IFS= read -r -d '' file; do
+    case "$file" in secrets/*.example|secrets/README.md) continue;; esac
+    [ -f "$file" ] || continue
+    { grep -InE "$pat" -- "$file" 2>/dev/null || true; } | while IFS= read -r match; do printf '%s:%s\n' "$file" "$match" >> "$scan_file"; done
+  done < <(git ls-files --others --exclude-standard -z)
+  hits="$(grep -Ev "$placeholder" "$scan_file" || true)"  # scan tracked and unstaged files, then drop placeholders
   [ -z "$hits" ] && continue
   printf 'ERROR: potential secret pattern matched: %s\n' "$pat" >&2
   printf '%s\n' "$hits" | cut -d: -f1-2 | sort -u >&2
