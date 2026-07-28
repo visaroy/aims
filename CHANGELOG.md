@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+- Added a 66-second cross-machine/cross-agent handoff demo and a disposable under-10-minute acceptance test covering the complete session lifecycle.
+- Added a structured GitHub issue form for sanitized alpha tester feedback; repository topics and the `tester-feedback` label now improve discovery and triage.
+
 ## 0.7.0 — 2026-07-28
 - Added advisory, non-mutating `aims handoff check <session-id>` readiness checks that keep transport blockers separate from contextual warnings.
 - Added Git-native handoff delta reporting during adoption, optional concise handoff briefs, continuation metadata, and session-list filters.
