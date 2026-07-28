@@ -1,0 +1,120 @@
+name: AIMS alpha tester feedback
+description: Report an AIMS test, including successful handoffs, confusing behavior, or failures.
+title: "[Tester feedback]: "
+labels:
+  - tester-feedback
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for testing AIMS. Reports from real multi-agent and multi-machine workflows are especially useful.
+
+        **Do not include credentials, private repository URLs, access tokens, personal data, or unsanitized logs.** Replace sensitive values with clear placeholders before submitting.
+  - type: input
+    id: aims-version
+    attributes:
+      label: AIMS version
+      description: Run `aims version`.
+      placeholder: v0.7.0
+    validations:
+      required: true
+  - type: dropdown
+    id: operating-system
+    attributes:
+      label: Operating system
+      options:
+        - macOS (Apple silicon)
+        - macOS (Intel)
+        - Linux
+        - WSL
+        - Other
+    validations:
+      required: true
+  - type: input
+    id: os-version
+    attributes:
+      label: OS version and architecture
+      placeholder: Ubuntu 24.04, x86_64
+    validations:
+      required: true
+  - type: input
+    id: bash-version
+    attributes:
+      label: Bash version
+      description: Run `bash --version | head -n 1`.
+      placeholder: GNU bash, version 3.2.57
+    validations:
+      required: true
+  - type: checkboxes
+    id: agents
+    attributes:
+      label: Agents used
+      description: Select every agent involved in the test.
+      options:
+        - label: Claude Code
+        - label: Codex CLI
+        - label: OpenCode
+        - label: Gemini CLI
+        - label: Other
+    validations:
+      required: true
+  - type: dropdown
+    id: topology
+    attributes:
+      label: Test topology
+      options:
+        - One machine, one agent
+        - One machine, multiple agents
+        - Two machines, same operating system
+        - Two machines, different operating systems
+        - More than two machines
+        - Disposable local simulation from docs/TESTING.md
+    validations:
+      required: true
+  - type: textarea
+    id: scenario
+    attributes:
+      label: What did you test?
+      description: List the AIMS lifecycle steps and the agents or machines involved.
+      placeholder: |
+        1. Started a session with Claude Code on machine A.
+        2. Saved and handed it off.
+        3. Adopted it with Codex CLI on machine B.
+        4. Continued the work and published the session.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected result
+      description: What did you expect AIMS to do?
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual result
+      description: Include the exact error and the command that produced it, or explain what worked well.
+    validations:
+      required: true
+  - type: textarea
+    id: doctor
+    attributes:
+      label: Sanitized `aims doctor` output
+      description: Remove usernames, private paths, repository URLs, hostnames, IP addresses, and credentials.
+      render: shell
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Additional sanitized logs
+      description: Optional. Include only the minimum output needed to understand the report.
+      render: shell
+  - type: checkboxes
+    id: safety
+    attributes:
+      label: Safety check
+      options:
+        - label: I removed credentials, tokens, private repository URLs, personal data, hostnames, IP addresses, and other sensitive values from this report.
+          required: true

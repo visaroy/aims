@@ -12,6 +12,14 @@ git remote (`origin`), never a machine-to-machine link. No agent needs access to
 **You never learn AIMS commands.** Your agent does. You talk to it normally — *"save and close the
 session"*, *"hand this off to the other machine"* — and it runs AIMS for you.
 
+## 60-second handoff
+
+[![AIMS handoff demo: Claude Code on machine A hands work through Git to Codex on machine B](docs/assets/aims-handoff-demo.gif)](docs/TESTING.md)
+
+The demo shows the verified lifecycle: `start` → `save` → `handoff` → `adopt` → `save` → `publish`.
+Run the same workflow safely with disposable local repositories using the
+[under-10-minute acceptance test](docs/TESTING.md).
+
 ---
 
 ## 🤖 Instructions for Your Agent
@@ -179,7 +187,8 @@ aims publish <session-id>                        # merge to main, register, done
 
 See [`docs/COMMANDS.md`](docs/COMMANDS.md), [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md),
 [`docs/AIMS.md`](docs/AIMS.md), [`docs/AGENTS-MEMORY.md`](docs/AGENTS-MEMORY.md), and the
-[session handoff roadmap](docs/TODO.md). **Documentation language:** English is official; translations under
+[acceptance test](docs/TESTING.md), plus the [session handoff roadmap](docs/TODO.md).
+**Documentation language:** English is official; translations under
 [`docs/i18n/`](docs/i18n/).
 
 ## Guarantees & guards
