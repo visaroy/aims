@@ -1,7 +1,8 @@
 # Changelog
 
-## Unreleased
+## 0.7.0 — 2026-07-28
 - Added advisory, non-mutating `aims handoff check <session-id>` readiness checks that keep transport blockers separate from contextual warnings.
+- Added Git-native handoff delta reporting during adoption, optional concise handoff briefs, continuation metadata, and session-list filters.
 
 ## 0.6.1 — 2026-07-27
 - Added an English comparison of AIMS and Softaworks Agent Toolkit session handoff practices, plus a documented AIMS roadmap for handoff readiness and adoption diagnostics.

@@ -3,7 +3,7 @@
 **AI Multi-agent Sessions** — git-native session management for AI coding agents,
 across many machines and many agents.
 
-![Version](https://img.shields.io/badge/Version-v0.6.1-blue) ![Last Update](https://img.shields.io/badge/Update-2026--07--27-orange) ![status](https://img.shields.io/badge/status-alpha-orange) ![license](https://img.shields.io/badge/license-MIT-blue) ![shell](https://img.shields.io/badge/shell-bash-121011)
+![Version](https://img.shields.io/badge/Version-v0.7.0-blue) ![Last Update](https://img.shields.io/badge/Update-2026--07--28-orange) ![status](https://img.shields.io/badge/status-alpha-orange) ![license](https://img.shields.io/badge/license-MIT-blue) ![shell](https://img.shields.io/badge/shell-bash-121011)
 
 AIMS turns each unit of AI work into a **git branch in an isolated worktree**. Sessions can be
 **handed off** between machines and **adopted** by any agent — because the source of truth is a
