@@ -1,13 +1,24 @@
 #!/usr/bin/env bash
 set -euo pipefail
-repo="${AIMS_HOME:-$HOME/.aims}"
-now="$(date -u +%s)"
-git -C "$repo" fetch origin '+refs/heads/ai/*:refs/remotes/origin/ai/*' --prune -q 2>/dev/null || true  # refresh; offline fallback below
-git -C "$repo" ls-remote --heads origin 'refs/heads/ai/*' 2>/dev/null | sed 's#.*refs/heads/##' | sort | while read -r br; do
-  sid="${br#ai/}"; ts="${sid%%-*}"  # sid starts with YYYYMMDDTHHMMSSZ
-  start="$(date -ju -f '%Y%m%dT%H%M%SZ' "$ts" +%s 2>/dev/null || date -u -d "${ts:0:8} ${ts:9:2}:${ts:11:2}:${ts:13:2}" +%s 2>/dev/null || echo "$now")"  # BSD/GNU date
-  age_h=$(( (now - start) / 3600 ))
-  scope="$(git -C "$repo" show "origin/$br:sessions/work/$sid/metadata.json" 2>/dev/null | python3 -c 'import sys,json; print(",".join(json.load(sys.stdin).get("scope",[])) or "-")' 2>/dev/null || echo '-')"
-  flag=""; [ "$age_h" -ge 48 ] && flag="  ⚠️ STALE(>48h — publish or delete)"
-  printf '%s  age=%sh  scope=%s%s\n' "$br" "$age_h" "$scope" "$flag"
+repo="${AIMS_HOME:-$HOME/.aims}"; now="$(date -u +%s)"; handoff=0; stale=0; project=""
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --handoff) handoff=1; shift;;
+    --stale) stale=1; shift;;
+    --project) project="${2:-}"; [ -n "$project" ] || { echo 'usage: aims list [--handoff] [--stale] [--project <project>]' >&2; exit 2; }; shift 2;;
+    *) echo "usage: aims list [--handoff] [--stale] [--project <project>]" >&2; exit 2;;
+  esac
 done
+git -C "$repo" fetch origin '+refs/heads/ai/*:refs/remotes/origin/ai/*' --prune -q 2>/dev/null || true
+while read -r br; do
+  sid="${br#ai/}"; ts="${sid%%-*}"
+  start="$(date -ju -f '%Y%m%dT%H%M%SZ' "$ts" +%s 2>/dev/null || date -u -d "${ts:0:8} ${ts:9:2}:${ts:11:2}:${ts:13:2}" +%s 2>/dev/null || echo "$now")"
+  age_h=$(( (now - start) / 3600 )); meta="$(git -C "$repo" show "origin/$br:sessions/work/$sid/metadata.json" 2>/dev/null || echo '{}')"
+  fields="$(printf '%s' "$meta" | python3 -c 'import json,sys; m=json.load(sys.stdin); print(m.get("status","")); print(m.get("project","")); print(",".join(m.get("scope",[])) or "-")' 2>/dev/null || printf '\n\n-')"
+  status="$(printf '%s\n' "$fields" | sed -n '1p')"; item_project="$(printf '%s\n' "$fields" | sed -n '2p')"; scope="$(printf '%s\n' "$fields" | sed -n '3p')"
+  [ "$handoff" = 0 ] || [ "$status" = handoff ] || continue
+  [ "$stale" = 0 ] || [ "$age_h" -ge 48 ] || continue
+  [ -z "$project" ] || [ "$item_project" = "$project" ] || continue
+  flag=""; [ "$age_h" -ge 48 ] && flag="  ⚠️ STALE(>48h — publish or delete)"
+  printf '%s  project=%s  status=%s  age=%sh  scope=%s%s\n' "$br" "${item_project:--}" "${status:--}" "$age_h" "$scope" "$flag"
+done < <(git -C "$repo" ls-remote --heads origin 'refs/heads/ai/*' 2>/dev/null | sed 's#.*refs/heads/##' | sort)

@@ -55,6 +55,22 @@ else:
     print('  setup     : '+str(e.get('setup') or '-'))
     print('  test      : '+str(e.get('test') or '-'))
 PYEOF
+boundary="$(python3 - <<PYEOF
+import json
+try: print(json.load(open('/tmp/aims-adopt-meta.$$.json')).get('handoff_base_commit',''))
+except Exception: print('')
+PYEOF
+)"
+echo "  --- HANDOFF DELTA ---"
+if [ -n "$boundary" ] && git -C "$repo" cat-file -e "$boundary^{commit}" 2>/dev/null; then
+  count="$(git -C "$repo" rev-list --count "$boundary..origin/$branch")"
+  echo "  comparison boundary: $boundary"
+  echo "  commits since boundary: $count"
+  echo "  changed paths since boundary:"
+  git -C "$repo" diff --name-only "$boundary..origin/$branch" | sed 's/^/    - /' || true
+else
+  echo "  detailed delta unavailable: this session predates handoff boundaries."
+fi
 rm -f /tmp/aims-adopt-meta.$$.json
 echo "  --- PROBE THIS HOST ($(hostname -s)) ---"
 missing=0

@@ -6,34 +6,34 @@ This roadmap is intentionally limited to proposals that strengthen AIMS session 
 
 ### P1: Advisory handoff readiness check
 
-- [ ] Add `aims handoff check <session-id>`.
-- [ ] Verify session ID, matching `ai/<session-id>` branch, worktree, metadata, and `origin` availability.
-- [ ] Run the existing secret scanner without changing session state.
+- [x] Add `aims handoff check <session-id>`.
+- [x] Verify session ID, matching `ai/<session-id>` branch, worktree, metadata, and `origin` availability.
+- [x] Run the existing secret scanner without changing session state.
 - [ ] Report missing session artifacts and unresolved placeholders as warnings.
-- [ ] Report whether a coding session has a useful `environment` declaration: repositories, toolchain, setup, and test instructions.
-- [ ] Report whether a concrete next action or blocker is present.
+- [x] Report whether a coding session has a useful `environment` declaration: repositories, toolchain, setup, and test instructions.
+- [x] Report whether a concrete next action or blocker is present.
 - [ ] Add Bash tests for valid, incomplete, mismatched, and secret-blocked sessions on GNU/Linux and macOS Bash 3.2.
 
 ### P1: Git-native adoption delta report
 
-- [ ] Record a stable handoff comparison boundary in session metadata.
-- [ ] Extend `aims adopt` to report commits and changed paths since that boundary.
+- [x] Record a stable handoff comparison boundary in session metadata.
+- [x] Extend `aims adopt` to report commits and changed paths since that boundary.
 - [ ] Include latest branch update, current handoff status, and source author or host where available.
-- [ ] Keep Git ancestry and branch divergence as the source of truth; time-based age is supplementary only.
+- [x] Keep Git ancestry and branch divergence as the source of truth; time-based age is supplementary only.
 - [ ] Add tests for no changes, later changes, and divergent branch states.
 
 ### P2: Optional concise handoff brief
 
-- [ ] Provide an English template for `sessions/work/<session-id>/handoff.md`.
-- [ ] Include current state, decisions and rationale, immediate next action, blockers, critical files or repositories, environment, verification, and risks.
-- [ ] Keep `worklog.md` as the chronological record; do not duplicate it mechanically.
+- [x] Provide an English template for `sessions/work/<session-id>/handoff.md`.
+- [x] Include current state, decisions and rationale, immediate next action, blockers, critical files or repositories, environment, verification, and risks.
+- [x] Keep `worklog.md` as the chronological record; do not duplicate it mechanically.
 - [ ] Keep the brief optional and validate it advisory-first.
 
 ### P3: Cross-session continuity and discovery
 
-- [ ] Evaluate optional `continues_from` metadata for a new session that continues another session.
-- [ ] Add `aims list --handoff`, `aims list --stale`, and `aims list --project <project>` if real session volume justifies them.
-- [ ] Preserve the normal `aims handoff` to `aims adopt` path as a continuation of the same branch, not a new linked session.
+- [x] Evaluate optional `continues_from` metadata for a new session that continues another session.
+- [x] Add `aims list --handoff`, `aims list --stale`, and `aims list --project <project>` if real session volume justifies them.
+- [x] Preserve the normal `aims handoff` to `aims adopt` path as a continuation of the same branch, not a new linked session.
 
 ## Non-goals
 

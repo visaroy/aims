@@ -1,0 +1,44 @@
+#!/usr/bin/env bash
+set -euo pipefail
+sid="${1:-}"
+[ -n "$sid" ] && [ $# -eq 1 ] || { echo "usage: aims handoff check <session-id>" >&2; exit 2; }
+[[ "$sid" =~ ^[A-Za-z0-9._-]+$ ]] || { echo "ERROR: unsafe session id: $sid" >&2; exit 2; }
+repo="${AIMS_HOME:-$HOME/.aims}"
+wt="$repo/.worktrees/$sid"
+[ -d "$wt" ] || { echo "BLOCKED: no local AIMS worktree for session $sid" >&2; exit 1; }
+[ "$(git -C "$wt" branch --show-current)" = "ai/$sid" ] || { echo "BLOCKED: worktree branch does not match session $sid" >&2; exit 1; }
+git -C "$wt" remote get-url origin >/dev/null 2>&1 || { echo "BLOCKED: session worktree has no origin remote" >&2; exit 1; }
+meta="$wt/sessions/work/$sid/metadata.json"
+[ -f "$meta" ] || { echo "BLOCKED: missing session metadata for $sid" >&2; exit 1; }
+python3 - "$meta" "$sid" <<'PY'
+import json,sys
+try:
+    data=json.load(open(sys.argv[1]))
+except Exception as exc:
+    print(f'BLOCKED: unreadable metadata: {exc}',file=sys.stderr); raise SystemExit(1)
+if data.get('session_id') != sys.argv[2]:
+    print('BLOCKED: metadata session_id does not match requested session',file=sys.stderr); raise SystemExit(1)
+PY
+if ! (cd "$wt" && "${AIMS_ROOT:-$(cd "$(dirname "$0")/.." && pwd)}/lib/validate-no-secrets.sh") >/dev/null; then
+  echo "BLOCKED: potential secret detected; resolve it before handoff" >&2
+  exit 1
+fi
+warn=0
+worklog="$wt/sessions/work/$sid/worklog.md"
+if [ ! -s "$worklog" ]; then echo "WARNING: worklog.md is empty"; warn=1; elif ! grep -qiE 'next action|blocker' "$worklog"; then echo "WARNING: no explicit next action or blocker found in worklog.md"; warn=1; fi
+coding="$(python3 - "$meta" <<'PY'
+import json,sys
+m=json.load(open(sys.argv[1])); e=m.get('environment') or {}
+print('yes' if e.get('code_repos') else 'no')
+PY
+)"
+if [ "$coding" = yes ]; then
+  missing="$(python3 - "$meta" <<'PY'
+import json,sys
+m=json.load(open(sys.argv[1])); e=m.get('environment') or {}
+print(', '.join(k for k in ('toolchain','setup','test') if not e.get(k)))
+PY
+)"
+  if [ -n "$missing" ]; then echo "WARNING: coding session lacks environment fields: $missing"; warn=1; fi
+fi
+if [ "$warn" = 1 ]; then echo "READY_WITH_WARNINGS: $sid can be handed off; review warnings above."; else echo "READY: $sid can be handed off."; fi

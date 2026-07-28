@@ -10,7 +10,7 @@ AIMS_ROOT="$(cd -P "$(dirname "$SOURCE")/.." && pwd)"
 export AIMS_ROOT
 cmd="${1:-help}"; [ $# -gt 0 ] && shift || true
 case "$cmd" in
-  start|save|handoff|handoff-all|checkpoint|adopt|publish|list) exec "$AIMS_ROOT/lib/aims-$cmd" "$@" ;;
+  start|save|handoff|handoff-all|checkpoint|adopt|publish|list|brief) exec "$AIMS_ROOT/lib/aims-$cmd" "$@" ;;
   init)      exec "$AIMS_ROOT/lib/aims-init" "$@" ;;
   artifacts) exec "$AIMS_ROOT/lib/aims-artifacts" "$@" ;;
   wire-agents) exec "$AIMS_ROOT/lib/aims-wire-agents" "$@" ;;
@@ -29,9 +29,11 @@ usage: aims <command> [args]
   start <proj> <topic> [agent] [--scope ...]   Start a session (branch + worktree)
   save                  Checkpoint: commit whole worktree + push (run in worktree)
   handoff [note]        Hand session from its worktree (push all + mark)
+  handoff check <session-id>  Check handoff readiness without changing session state
   handoff <session-id>  Hand one local session from AIMS_HOME/.worktrees
   handoff-all [--yes]   Hand off all valid local AIMS worktrees from AIMS_HOME
   checkpoint <session-id> Save and push one local session without handoff
+  brief <session-id>    Create an optional concise handoff brief
   adopt <session-id> [--remote]   Take over a session from origin
   publish <session-id>  Merge session to main, append registry, delete branch
   list                  List active sessions with age/scope/STALE flag

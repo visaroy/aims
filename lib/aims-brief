@@ -1,0 +1,15 @@
+#!/usr/bin/env bash
+set -euo pipefail
+sid="${1:-}"
+[ -n "$sid" ] && [ $# -eq 1 ] || { echo "usage: aims brief <session-id>" >&2; exit 2; }
+[[ "$sid" =~ ^[A-Za-z0-9._-]+$ ]] || { echo "ERROR: unsafe session id: $sid" >&2; exit 2; }
+repo="${AIMS_HOME:-$HOME/.aims}"; wt="$repo/.worktrees/$sid"
+[ -d "$wt" ] || { echo "ERROR: no local AIMS worktree for session $sid" >&2; exit 1; }
+[ "$(git -C "$wt" branch --show-current)" = "ai/$sid" ] || { echo "ERROR: worktree branch does not match session $sid" >&2; exit 1; }
+meta="$wt/sessions/work/$sid/metadata.json"; brief="$wt/sessions/work/$sid/handoff.md"
+[ -f "$meta" ] || { echo "ERROR: missing session metadata for $sid" >&2; exit 1; }
+[ ! -e "$brief" ] || { echo "ERROR: handoff brief already exists: $brief" >&2; exit 1; }
+root="${AIMS_ROOT:-$(cd "$(dirname "$0")/.." && pwd)}"
+cp "$root/templates/handoff.md" "$brief"
+printf '\nSession: `%s`\n' "$sid" >> "$brief"
+echo "OK: created handoff brief $brief"

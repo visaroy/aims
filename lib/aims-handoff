@@ -2,6 +2,9 @@
 set -euo pipefail
 # Run inside a session worktree, or from AIMS_HOME/.worktrees as `aims handoff <session-id>`.
 # Guarantees origin has the COMPLETE session work and marks it as handed off; it never merges to main.
+if [ "${1:-}" = check ]; then
+  shift; root="${AIMS_ROOT:-$(cd "$(dirname "$0")/.." && pwd)}"; exec "$root/lib/aims-handoff-check" "$@"
+fi
 branch="$(git branch --show-current)"
 if [[ "$branch" != ai/* && "${1:-}" =~ ^[A-Za-z0-9._-]+$ ]]; then
   requested="$1"; repo="${AIMS_HOME:-$HOME/.aims}"; target="$repo/.worktrees/$requested"
@@ -17,12 +20,14 @@ git remote get-url origin >/dev/null 2>&1 || { echo "ERROR: handoff needs an 'or
 note="${1:-}"                                                                    # optional handoff note (e.g. "waiting on OAuth client id")
 meta="sessions/work/$sid/metadata.json"
 [ -f "$meta" ] || { echo "ERROR: missing $meta — is this a session worktree?" >&2; exit 2; }
-python3 - "$meta" <<PY                                                           # status=handoff + timestamp in metadata
+handoff_base_commit="$(git rev-parse HEAD)"
+python3 - "$meta" "$handoff_base_commit" <<PY                                                           # status=handoff + timestamp in metadata
 import json,sys,datetime
 p=sys.argv[1]; m=json.load(open(p))
 m['status']='handoff'
 m['handoff_at']=datetime.datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%SZ')
 m['handoff_from']=__import__('socket').gethostname().split('.')[0]
+m['handoff_base_commit']=sys.argv[2]
 json.dump(m,open(p,'w'),indent=2,ensure_ascii=False); open(p,'a').write('\n')
 PY
 wl="sessions/work/$sid/worklog.md"

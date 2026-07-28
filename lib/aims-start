@@ -1,8 +1,17 @@
 #!/usr/bin/env bash
 set -euo pipefail
-project="${1:-}"; topic="${2:-}"; agent="${3:-opencode}"; scope_csv=""
-if [ "${3:-}" = "--scope" ]; then agent="opencode"; scope_csv="${4:-}"; elif [ "${4:-}" = "--scope" ]; then scope_csv="${5:-}"; fi  # aims-start <project> <topic> [agent] [--scope host:x,repo:y]
-[ -n "$project" ] && [ -n "$topic" ] || { echo "usage: aims-start <project> <topic> [agent] [--scope host:x,repo:y,...]" >&2; exit 2; }
+project="${1:-}"; topic="${2:-}"; shift 2 || true
+[ -n "$project" ] && [ -n "$topic" ] || { echo "usage: aims-start <project> <topic> [agent] [--scope host:x,repo:y,...] [--continues-from session-id]" >&2; exit 2; }
+agent="opencode"; scope_csv=""; continues_from=""
+if [ $# -gt 0 ] && [ "${1#--}" = "$1" ]; then agent="$1"; shift; fi
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --scope) scope_csv="${2:-}"; shift 2;;
+    --continues-from) continues_from="${2:-}"; shift 2;;
+    *) echo "ERROR: unknown aims-start option: $1" >&2; exit 2;;
+  esac
+done
+[ -z "$continues_from" ] || [[ "$continues_from" =~ ^[A-Za-z0-9._-]+$ ]] || { echo "ERROR: unsafe predecessor session id: $continues_from" >&2; exit 2; }
 repo="${AIMS_HOME:-$HOME/.aims}"
 git -C "$repo" remote get-url origin >/dev/null 2>&1 || { echo "ERROR: data repo $repo has no 'origin' remote. AIMS syncs sessions through origin; add one first:" >&2; echo "  git -C \"$repo\" remote add origin <url> && git -C \"$repo\" push -u origin main" >&2; exit 1; }
 if [ -n "${AIMS_ROOT:-}" ]; then AIMS_LIB="$AIMS_ROOT/lib"; else AIMS_LIB="$(cd "$(dirname "$0")" && pwd)"; fi   # engine = directory of this script
@@ -34,7 +43,7 @@ cat > "$wt/sessions/work/$sid/metadata.json" <<JSON
     "exec_host": "",
     "setup": "",
     "test": ""
-  }
+  }$( [ -n "$continues_from" ] && printf ',\n  "continues_from": "%s"' "$continues_from" )
 }
 JSON
 touch "$wt/sessions/work/$sid/worklog.md" "$wt/sessions/work/$sid/commands.md" "$wt/sessions/work/$sid/tests.md" "$wt/sessions/work/$sid/final-summary.md" "$wt/sessions/work/$sid/prompt-log.md"
