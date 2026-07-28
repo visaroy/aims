@@ -3,6 +3,7 @@
 ## Unreleased
 - Added a 66-second cross-machine/cross-agent handoff demo and a disposable under-10-minute acceptance test covering the complete session lifecycle.
 - Added a structured GitHub issue form for sanitized alpha tester feedback; repository topics and the `tester-feedback` label now improve discovery and triage.
+- Hardened tester onboarding after independent review: the acceptance test isolates `HOME`, XDG, and Git configuration; the public issue form now routes vulnerabilities to enabled private security advisories and collects more reproducible diagnostics.
 
 ## 0.7.0 — 2026-07-28
 - Added advisory, non-mutating `aims handoff check <session-id>` readiness checks that keep transport blockers separate from contextual warnings.
