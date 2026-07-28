@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.6.1 — 2026-07-27
 - Added an English comparison of AIMS and Softaworks Agent Toolkit session handoff practices, plus a documented AIMS roadmap for handoff readiness and adoption diagnostics.
 
 ## 0.6.0 — 2026-07-27
