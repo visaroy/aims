@@ -163,6 +163,7 @@ You do **not** memorize `aims start` / `aims save` / etc. Say what you want; the
 aims start myproject "fix login bug" claude    # new branch + worktree
 cd ~/.aims/.worktrees/<session-id>             # agent works here
 aims save                                       # checkpoint: commit whole worktree + push
+aims rebase <session-id>                         # safe rebase after a publish merge conflict
 aims handoff "waiting on CI"                     # hand to another machine (pushes everything)
 # Or, from ~/.aims/.worktrees: aims handoff <session-id>
 aims adopt <session-id>                          # (elsewhere) take it over from origin
@@ -174,6 +175,7 @@ aims publish <session-id>                        # merge to main, register, done
 | `aims init [dir]` | Scaffold a data repo |
 | `aims start <proj> <topic> [agent] [--scope ...]` | Start a session |
 | `aims save` | Checkpoint: commit the whole worktree + push |
+| `aims rebase <id>` | Rebase a synchronized clean session onto `origin/main`; checkpoint the rewrite safely |
 | `aims handoff [note]` | Hand session to another machine/agent |
 | `aims handoff <session-id>` | Hand off one local session from `.worktrees/` |
 | `aims handoff-all [--yes]` | Hand off all valid local worktrees |
@@ -195,6 +197,21 @@ See [`docs/COMMANDS.md`](docs/COMMANDS.md), [`docs/ARCHITECTURE.md`](docs/ARCHIT
 
 - **No silent data loss**: `aims save` stages the *whole* worktree and always pushes when ahead;
   `aims publish` refuses a dirty or unpushed worktree and warns on an empty merge.
+- **Safe rewritten checkpoints**: only `aims rebase` creates the private exact-OID rewrite marker;
+  `aims save` uses `--force-with-lease` only when the remote still has that exact captured OID.
+- **Concurrent writers are preserved**: a remote advance, deleted branch, stale marker, or unmarked
+  divergence is refused rather than force-pushed.
+- **Publication state is centralized**: start, save, rebase, handoff, and adopt maintain the local
+  `refs/aims/published/<id>` sentinel; adoption push failures are fatal and retain the worktree.
+- **Every branch update is leased**: existing branches use the exact fetched OID, while initial branch
+  creation requires remote absence and a zero-OID lease.
+- **Pre-existing divergence is refused**: handoff and adopt require the fetched remote tip to be an
+  ancestor of local `HEAD` before checkpointing or applying an exact lease.
+- **Adoption targets are exact**: adopt edits and pushes only a worktree on `ai/<session-id>` and checks
+  the observed remote OID against that exact local branch/`HEAD`, including stale-branch recovery.
+- **Force-policy recovery is supported**: save rebased `HEAD` at `refs/aims/recovery/<id>`, reset to
+  `refs/aims/rewrite/<id>`, merge `origin/main` without committing, restore the recovery tree, commit,
+  then save; delete the recovery ref only after success so actual conflict work is preserved.
 - **No two-writer conflict**: `aims adopt` warns if a branch moved recently; `aims handoff` marks
   a session released so adoption elsewhere is known-safe.
 - **`main` is protected**: a `pre-push` hook blocks direct pushes; integration only via `aims publish`.

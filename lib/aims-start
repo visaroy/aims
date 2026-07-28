@@ -15,6 +15,7 @@ done
 repo="${AIMS_HOME:-$HOME/.aims}"
 git -C "$repo" remote get-url origin >/dev/null 2>&1 || { echo "ERROR: data repo $repo has no 'origin' remote. AIMS syncs sessions through origin; add one first:" >&2; echo "  git -C \"$repo\" remote add origin <url> && git -C \"$repo\" push -u origin main" >&2; exit 1; }
 if [ -n "${AIMS_ROOT:-}" ]; then AIMS_LIB="$AIMS_ROOT/lib"; else AIMS_LIB="$(cd "$(dirname "$0")" && pwd)"; fi   # engine = directory of this script
+. "$AIMS_LIB/aims-sentinel"
 git -C "$repo" config user.name  >/dev/null 2>&1 || export GIT_AUTHOR_NAME="${AIMS_GIT_NAME:-AIMS Agent}"    GIT_COMMITTER_NAME="${AIMS_GIT_NAME:-AIMS Agent}"      # target repo may have no git identity (commit runs in its worktree)
 git -C "$repo" config user.email >/dev/null 2>&1 || export GIT_AUTHOR_EMAIL="${AIMS_GIT_EMAIL:-aims@localhost}" GIT_COMMITTER_EMAIL="${AIMS_GIT_EMAIL:-aims@localhost}"  # fall back only when unset (real identity is kept)
 sanitize() { printf '%s' "$1" | tr '[:upper:]' '[:lower:]' | sed -E 's/[^a-z0-9]+/-/g; s/^-+|-+$//g'; }
@@ -24,6 +25,7 @@ wt="$repo/.worktrees/$sid"
 scope_json="[]"
 [ -n "$scope_csv" ] && scope_json="[$(printf '%s' "$scope_csv" | sed -E 's/[[:space:]]//g; s/([^,]+)/"\1"/g')]"  # csv -> JSON array
 git -C "$repo" fetch origin main
+aims_assert_remote_absent "$(git -C "$repo" remote get-url origin)" "$branch"
 git -C "$repo" worktree add "$wt" -b "$branch" origin/main
 mkdir -p "$wt/sessions/work/$sid"
 cat > "$wt/sessions/work/$sid/metadata.json" <<JSON
@@ -49,6 +51,7 @@ JSON
 touch "$wt/sessions/work/$sid/worklog.md" "$wt/sessions/work/$sid/commands.md" "$wt/sessions/work/$sid/tests.md" "$wt/sessions/work/$sid/final-summary.md" "$wt/sessions/work/$sid/prompt-log.md"
 git -C "$wt" add "sessions/work/$sid"
 git -C "$wt" commit -m "🔒 session: start $sid"
-git -C "$wt" push -u origin "$branch"
+git -C "$wt" push --force-with-lease="refs/heads/$branch:$(aims_zero_oid "$wt")" -u origin "$branch"
+aims_sentinel_mark_at "$wt" "$sid" "$(git -C "$wt" rev-parse HEAD)"
 "$AIMS_LIB/aims-list" 2>/dev/null | grep -v "^$sid" | grep -q "STALE\|SCOPE" && echo "INFO: check active sessions above for scope overlap (aims-list)" >&2 || true
 printf 'SESSION_ID=%s\nBRANCH=%s\nWORKTREE=%s\nSCOPE=%s\n' "$sid" "$branch" "$wt" "$scope_json"

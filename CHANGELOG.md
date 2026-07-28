@@ -4,6 +4,31 @@
 - Added a 66-second cross-machine/cross-agent handoff demo and a disposable under-10-minute acceptance test covering the complete session lifecycle.
 - Added a structured GitHub issue form for sanitized alpha tester feedback; repository topics and the `tester-feedback` label now improve discovery and triage.
 - Hardened tester onboarding after independent review: the acceptance test isolates `HOME`, XDG, and Git configuration; the public issue form now routes vulnerabilities to enabled private security advisories and collects more reproducible diagnostics.
+- Added `aims rebase <session-id>` for clean, synchronized recovery from a publish merge conflict.
+- `aims save` now protects rewritten session branches with a private exact-OID marker and
+  `--force-with-lease`; unmarked divergence, remote advances, and deleted branches fail safely.
+- Publish errors now distinguish session merge conflicts from main-push races and explain the safe
+  merge alternative when a remote rejects rewritten-session force pushes.
+- `aims save` now persists a local publication sentinel across tracking-ref pruning and refuses to
+  recreate a previously published remote branch that was deleted.
+- Force-push policy recovery is now executable: reset to the captured rewrite OID, merge `origin/main`,
+  and save with an ordinary fast-forward push.
+- Non-resumable pre-rebase startup failures now clear an unchanged rewrite marker with compare-and-swap,
+  while active conflicts retain it for continue/abort recovery.
+- Publication sentinels now share one lifecycle helper and are seeded by start, save, rebase, handoff,
+  and adopt; adopt checkpoint push failures are fatal and retain the worktree.
+- No-force recovery now saves rebased `HEAD` in a recovery ref and merges it back after resetting to
+  the original remote tip, preserving unique resolved work.
+- Existing session updates in save, handoff, and adopt now use exact observed-OID leases; initial branch
+  creation asserts absence and uses a zero-OID lease, preventing deletion/recreation races.
+- No-force recovery now preserves actual conflict resolutions in a tree-preserving merge and retains
+  the recovery ref until ordinary save succeeds.
+- Handoff and adopt now refuse pre-existing remote divergence when the fetched tip is not an ancestor
+  of local `HEAD`; the harness covers both pre-fetch competing-writer cases.
+- Adopt now requires the reused or created worktree to be exactly on `ai/<sid>` and checks the observed
+  remote OID against that exact local branch/`HEAD`; stale local branches and wrong worktrees are covered.
+- Added a portable two-clone shell integration harness for normal saves, managed rewrites, conflicts,
+  competing writers, and failure guardrails.
 
 ## 0.7.0 — 2026-07-28
 - Added advisory, non-mutating `aims handoff check <session-id>` readiness checks that keep transport blockers separate from contextual warnings.

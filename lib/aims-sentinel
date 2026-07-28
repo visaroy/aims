@@ -1,0 +1,44 @@
+#!/usr/bin/env bash
+# Shared local publication-sentinel lifecycle. Source this file from command scripts.
+aims_sentinel_ref() { printf 'refs/aims/published/%s\n' "$1"; }
+aims_zero_oid() {
+  local repo="${1:-.}" sample
+  sample="$(git -C "$repo" hash-object --stdin </dev/null)" || return 1
+  printf '%0*d\n' "${#sample}" 0
+}
+aims_assert_remote_absent() {
+  local remote="$1" branch="$2" status
+  if git ls-remote --exit-code "$remote" "refs/heads/$branch" >/dev/null; then
+    echo "REFUSE: refs/heads/$branch already exists; refusing initial branch creation." >&2
+    return 1
+  else
+    status=$?
+  fi
+  if [ "$status" -ne 2 ]; then
+    echo "ERROR: could not verify that refs/heads/$branch is absent from origin." >&2
+    return "$status"
+  fi
+}
+aims_assert_observed_ancestor() {
+  local branch="$1" observed_oid="$2" local_oid="$3"
+  if git merge-base --is-ancestor "$observed_oid" "$local_oid"; then
+    return 0
+  fi
+  echo "REFUSE: observed origin/$branch $observed_oid is not an ancestor of local HEAD $local_oid; resolve the pre-existing divergence before checkpointing." >&2
+  return 1
+}
+aims_sentinel_oid() {
+  local sid="$1" ref
+  ref="$(aims_sentinel_ref "$sid")"
+  git rev-parse --verify --quiet "$ref"
+}
+aims_sentinel_mark() {
+  local sid="$1" oid="$2"
+  [ -n "$sid" ] && [ -n "$oid" ] || return 2
+  git update-ref "$(aims_sentinel_ref "$sid")" "$oid"
+}
+aims_sentinel_mark_at() {
+  local repo="$1" sid="$2" oid="$3"
+  [ -n "$repo" ] && [ -n "$sid" ] && [ -n "$oid" ] || return 2
+  git -C "$repo" update-ref "$(aims_sentinel_ref "$sid")" "$oid"
+}
