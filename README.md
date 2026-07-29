@@ -3,7 +3,7 @@
 **AI Multi-agent Sessions** — git-native session management for AI coding agents,
 across many machines and many agents.
 
-![Version](https://img.shields.io/badge/Version-v0.7.0-blue) ![Last Update](https://img.shields.io/badge/Update-2026--07--28-orange) ![status](https://img.shields.io/badge/status-alpha-orange) ![license](https://img.shields.io/badge/license-MIT-blue) ![shell](https://img.shields.io/badge/shell-bash-121011)
+![Version](https://img.shields.io/badge/Version-v0.7.0-blue) ![Last Update](https://img.shields.io/badge/Update-2026--07--28-orange) [![AIMS CI](https://github.com/visaroy/aims/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/visaroy/aims/actions/workflows/ci.yml) ![status](https://img.shields.io/badge/status-alpha-orange) ![license](https://img.shields.io/badge/license-MIT-blue) ![shell](https://img.shields.io/badge/shell-bash-121011)
 
 AIMS turns each unit of AI work into a **git branch in an isolated worktree**. Sessions can be
 **handed off** between machines and **adopted** by any agent — because the source of truth is a
@@ -12,13 +12,13 @@ git remote (`origin`), never a machine-to-machine link. No agent needs access to
 **You never learn AIMS commands.** Your agent does. You talk to it normally — *"save and close the
 session"*, *"hand this off to the other machine"* — and it runs AIMS for you.
 
-## 60-second handoff
+## Agent-to-agent handoff
 
 [![AIMS handoff demo: Claude Code on machine A hands work through Git to Codex on machine B](docs/assets/aims-handoff-demo.gif)](docs/TESTING.md)
 
 The demo shows the verified lifecycle: `start` → `save` → `handoff` → `adopt` → `save` → `publish`.
 Run the same workflow safely with disposable local repositories using the
-[under-10-minute acceptance test](docs/TESTING.md).
+[under-3-minute acceptance test](docs/TESTING.md).
 
 ---
 
@@ -173,19 +173,24 @@ aims publish <session-id>                        # merge to main, register, done
 | Command | Purpose |
 |---|---|
 | `aims init [dir]` | Scaffold a data repo |
-| `aims start <proj> <topic> [agent] [--scope ...]` | Start a session |
-| `aims save` | Checkpoint: commit the whole worktree + push |
+| `aims start <proj> <topic> [agent] [--scope ...] [--continues-from <id>]` | Start a session |
+| `aims save` | Scan tracked/untracked work, then commit the whole worktree + push |
 | `aims rebase <id>` | Rebase a synchronized clean session onto `origin/main`; checkpoint the rewrite safely |
-| `aims handoff [note]` | Hand session to another machine/agent |
+| `aims handoff [note]` | Secret-scan, checkpoint, and hand the session to another machine/agent |
+| `aims handoff check <id>` | Check handoff readiness without changing session state |
 | `aims handoff <session-id>` | Hand off one local session from `.worktrees/` |
 | `aims handoff-all [--yes]` | Hand off all valid local worktrees |
 | `aims checkpoint <id>\|--all` | Commit and push local sessions without handoff |
+| `aims brief <id>` | Create an optional concise handoff brief |
 | `aims adopt <id> [--remote]` | Take over a session from origin |
 | `aims publish <id>` | Merge to main, append registry, delete branch |
-| `aims list` | Active sessions with age / scope / STALE flag |
+| `aims list [--handoff] [--stale] [--project <project>]` | List and filter active sessions |
 | `aims artifacts <id>` | Session dir in the shared store (`AIMS_ARTIFACTS`) |
 | `aims wire-agents` | (Re)write the AIMS rules into agent config files |
+| `aims install-hooks` | Reinstall the data repo pre-push guard |
 | `aims doctor` | Health-check engine + data repo |
+| `aims preflight [mode]` | Report whether the current Git repo is ready for an AIMS session |
+| `aims version`, `aims help` | Print the version or public CLI contract |
 
 See [`docs/COMMANDS.md`](docs/COMMANDS.md), [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md),
 [`docs/AIMS.md`](docs/AIMS.md), [`docs/AGENTS-MEMORY.md`](docs/AGENTS-MEMORY.md), and the

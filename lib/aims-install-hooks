@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
+[ "$#" -eq 0 ] || { echo "usage: aims install-hooks" >&2; exit 2; }
 if [ -n "${AIMS_ROOT:-}" ]; then AIMS_HOOKS="$AIMS_ROOT/hooks"; else AIMS_HOOKS="$(cd "$(dirname "$0")/../hooks" && pwd)"; fi
 repo="${AIMS_HOME:-$HOME/.aims}"
 common="$(git -C "$repo" rev-parse --git-common-dir)"; case "$common" in /*) ;; *) common="$repo/$common" ;; esac  # --git-common-dir may be relative to repo; make absolute so install works from any cwd

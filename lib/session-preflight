@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
+[ "$#" -le 1 ] || { echo "usage: aims preflight [mode]" >&2; exit 2; }
 mode="${1:-write}"
 root="$(git rev-parse --show-toplevel 2>/dev/null || true)"
 [ -n "$root" ] || { echo "ERROR: not in a git repo" >&2; exit 2; }

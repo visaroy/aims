@@ -17,7 +17,7 @@ printf '{"session_id":"%s","status":"active"}\n' "$SID" > "$WT/sessions/work/$SI
 printf '# Worklog\n' > "$WT/sessions/work/$SID/worklog.md"
 git -C "$WT" add sessions/work && git -C "$WT" commit -q -m 'start session' && git -C "$WT" push -q -u origin "$BRANCH"
 printf 'unsaved Mac work\n' > "$WT/recovery-note.txt"
-output="$(AIMS_HOME="$DATA" "$ENGINE_ROOT/bin/aims" handoff-all --yes)"
+output="$(AIMS_HOME="$DATA//" "$ENGINE_ROOT/bin/aims" handoff-all --yes)"
 printf '%s\n' "$output" | grep -F "HANDOFF_OK $SID"
 git -C "$DATA" fetch -q origin "$BRANCH"
 test "$(git -C "$DATA" show "origin/$BRANCH:sessions/work/$SID/metadata.json" | python3 -c 'import json,sys;print(json.load(sys.stdin)["status"])')" = handoff

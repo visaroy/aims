@@ -5,6 +5,7 @@ set -euo pipefail
 # will change, backs up each original once, and wires only detected agents. Idempotent: each file
 # gets one marker-delimited block; re-running refreshes it in place (no second backup).
 # Skip the confirmation prompt with AIMS_YES=1 (bootstrap sets this after its own consent).
+[ "$#" -eq 0 ] || { echo "usage: aims wire-agents" >&2; exit 2; }
 root="${AIMS_ROOT:-$(cd "$(dirname "$0")/.." && pwd)}"
 rules="$root/templates/AGENTS.md"
 [ -f "$rules" ] || { echo "ERROR: rules template not found: $rules" >&2; exit 1; }
@@ -43,7 +44,7 @@ fi
 wire() {  # wire <realpath-file>
   local f="$1"; mkdir -p "$(dirname "$f")"
   if [ -s "$f" ] && ! grep -qF "$begin" "$f" 2>/dev/null; then  # back up the genuine pre-AIMS original, once
-    local bak="$f.aims-backup-$(date +%Y%m%d%H%M%S)"; cp "$f" "$bak"; echo "  backup:  $bak"
+    local bak; bak="$f.aims-backup-$(date +%Y%m%d%H%M%S)"; cp "$f" "$bak"; echo "  backup:  $bak"
   fi
   touch "$f"
   if grep -qF "$begin" "$f" 2>/dev/null; then

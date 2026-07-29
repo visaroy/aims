@@ -20,8 +20,8 @@ aims_assert_remote_absent() {
   fi
 }
 aims_assert_observed_ancestor() {
-  local branch="$1" observed_oid="$2" local_oid="$3"
-  if git merge-base --is-ancestor "$observed_oid" "$local_oid"; then
+  local branch="$1" observed_oid="$2" local_oid="$3" repo="${4:-.}"
+  if git -C "$repo" merge-base --is-ancestor "$observed_oid" "$local_oid"; then
     return 0
   fi
   echo "REFUSE: observed origin/$branch $observed_oid is not an ancestor of local HEAD $local_oid; resolve the pre-existing divergence before checkpointing." >&2

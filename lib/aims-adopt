@@ -4,6 +4,7 @@ if [ -n "${AIMS_ROOT:-}" ]; then AIMS_LIB="$AIMS_ROOT/lib"; else AIMS_LIB="$(cd 
 . "$AIMS_LIB/aims-sentinel"
 arg="${1:-}"                                                                          # aims adopt <session-id|ai/session-id> [--remote]
 [ -n "$arg" ] || { echo "usage: aims adopt <session-id> [--remote]" >&2; exit 2; }
+[ "$#" -eq 1 ] || { [ "$#" -eq 2 ] && [ "$2" = "--remote" ]; } || { echo "usage: aims adopt <session-id> [--remote]" >&2; exit 2; }
 remote=0; [ "${2:-}" = "--remote" ] && remote=1                                       # --remote = report only, do NOT create a local worktree (work stays on the session host)
 repo="${AIMS_HOME:-$HOME/.aims}"
 branch="$arg"; [[ "$branch" == ai/* ]] || branch="ai/$arg"
@@ -108,13 +109,13 @@ if [ -d "$wt" ]; then
   echo "INFO: worktree already exists: $wt"
 else
   if git -C "$repo" show-ref --verify --quiet "refs/heads/$branch"; then
-    aims_assert_observed_ancestor "$branch" "$remote_oid" "$(git -C "$repo" rev-parse "refs/heads/$branch")"
+    aims_assert_observed_ancestor "$branch" "$remote_oid" "$(git -C "$repo" rev-parse "refs/heads/$branch")" "$repo"
   fi
   git -C "$repo" worktree add "$wt" "$branch"
 fi
 current_branch="$(git -C "$wt" branch --show-current)"
 [ "$current_branch" = "$branch" ] || { echo "REFUSE: adopt worktree $wt is on $current_branch, expected $branch; no files were edited." >&2; exit 1; }
-aims_assert_observed_ancestor "$branch" "$remote_oid" "$(git -C "$wt" rev-parse HEAD)"
+aims_assert_observed_ancestor "$branch" "$remote_oid" "$(git -C "$wt" rev-parse HEAD)" "$wt"
 wl="$wt/sessions/work/$sid/worklog.md"
 adopter="${AIMS_AGENT:-$(whoami)}@$(hostname -s)"
 printf '\n- ADOPTED %s by %s — continuing from ARTIFACTS (git+worklog), NOT from the previous agent context.\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$adopter" >> "$wl"

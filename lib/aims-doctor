@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 set -uo pipefail
+[ "$#" -eq 0 ] || { echo "usage: aims doctor" >&2; exit 2; }
 home="${AIMS_HOME:-$HOME/.aims}"; fail=0
 ok(){ printf 'OK: %s\n' "$*"; }; err(){ printf 'ERROR: %s\n' "$*"; fail=1; }; warn(){ printf 'WARN: %s\n' "$*"; }
 command -v git >/dev/null && ok "git present" || err "git missing"
