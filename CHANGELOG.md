@@ -4,6 +4,7 @@
 - Added an exact 30-second, reproducible agent-centric handoff demo and a tracked disposable under-3-minute acceptance test covering the complete session lifecycle.
 - Added GitHub Actions quality, Ubuntu lifecycle, macOS Bash 3.2, and external-link jobs with a real status badge in the README.
 - Added a public CLI contract test; documented commands now reject unknown flags and surplus arguments with exit status 2 before mutation.
+- The installer-update regression now creates its temporary `main` branch from `HEAD`, so it works in detached GitHub Actions checkouts.
 - `aims save` and direct `aims handoff` now reject tracked or untracked secret patterns before staging, metadata changes, commits, or pushes.
 - Fixed `aims adopt` ancestry checks when the command is run outside the data repository by evaluating OIDs in the explicit repository/worktree.
 - Updated the handoff comparison to current AIMS behavior, split agent and human tester responsibilities, and added public documentation privacy and local-link guards; allowed placeholders can no longer suppress real PII on the same line.
