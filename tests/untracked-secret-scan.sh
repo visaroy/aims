@@ -11,4 +11,19 @@ printf 'token=ghp_%s\n' 'abcdefghijklmnopqrstuvwxyz1234567890' > "$TMP/repo/untr
 if (cd "$TMP/repo" && "$ROOT/lib/validate-no-secrets.sh") >/dev/null 2>&1; then
   echo 'FAIL: untracked secret was not rejected' >&2; exit 1
 fi
-printf 'PASS: secret scanner rejects untracked secret files\n'
+rm "$TMP/repo/untracked-secret.txt"
+printf 'placeholder token=ghp_%s\n' 'ABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890' > "$TMP/repo/mixed-placeholder-secret.txt"
+if (cd "$TMP/repo" && "$ROOT/lib/validate-no-secrets.sh") >/dev/null 2>&1; then
+  echo 'FAIL: real secret beside a placeholder was not rejected' >&2; exit 1
+fi
+rm "$TMP/repo/mixed-placeholder-secret.txt"
+printf 'token=ghp_%s\n' 'AAAAAplaceholderBBBBB' > "$TMP/repo/embedded-placeholder-secret.txt"
+if (cd "$TMP/repo" && "$ROOT/lib/validate-no-secrets.sh") >/dev/null 2>&1; then
+  echo 'FAIL: placeholder substring inside a real token suppressed the token' >&2; exit 1
+fi
+rm "$TMP/repo/embedded-placeholder-secret.txt"
+printf 'token=%s\n' '${EXAMPLE_API_TOKEN}' > "$TMP/repo/allowed-placeholder.txt"
+if ! (cd "$TMP/repo" && "$ROOT/lib/validate-no-secrets.sh") >/dev/null 2>&1; then
+  echo 'FAIL: complete variable placeholder was rejected' >&2; exit 1
+fi
+printf 'PASS: secret scanner rejects adjacent/embedded placeholder text and accepts a complete placeholder value\n'

@@ -13,6 +13,7 @@ and seeds the local `refs/aims/published/<id>` sentinel. `--continues-from` reco
 validated predecessor session ID; it does not replace normal handoff/adopt of the same session branch.
 
 ### `aims save`  *(run inside a worktree)*
+Scans tracked and untracked non-ignored files for secret patterns before mutation, then runs
 `git add -A` (whole worktree) + commit + **push when the branch is ahead of origin**. Never leaves
 work stranded. A normal save only fast-forwards the session branch using the exact remote OID observed
 by its fetch; initial creation asserts remote absence and uses a zero-OID lease. After `aims rebase`,
@@ -40,7 +41,8 @@ merge keeps the original remote tip as an ancestor, so save can use an ordinary 
 Guarantees `origin` has the complete session, sets `status=handoff`, and does not merge to main. A
 successful handoff refreshes the local publication sentinel and updates with the exact remote OID
 observed before its checkpoint push. It first requires that observed tip to be an ancestor of local
-`HEAD`; pre-existing divergence is refused before metadata changes.
+`HEAD`; pre-existing divergence is refused before metadata changes. Tracked and untracked non-ignored
+files are scanned for secret patterns before metadata, worklog, index, commit, or remote mutation.
 
 ### `aims handoff check <session-id>`  *(from `AIMS_HOME`)*
 Performs a non-mutating readiness check for one local session. It blocks only unsafe transport conditions (missing/mismatched worktree or metadata, absent `origin`, or a potential secret); incomplete context such as no explicit next action is advisory and prints a warning. It never stages, commits, pushes, or changes metadata.
@@ -106,3 +108,18 @@ Lists active `ai/*` branches with project, handoff status, age, scope, and a STA
 
 ### `aims doctor`
 Checks git/bash/python3, the data repo, registry, and origin remote.
+
+### `aims wire-agents`
+Detects supported local agents and installs the marker-delimited AIMS rules into their configuration files. It previews the files first and asks for confirmation unless `AIMS_YES=1`; backups are created once and repeated runs are idempotent.
+
+### `aims install-hooks`
+Installs or refreshes the data repo's pre-push guard. The guard blocks ordinary pushes to `main`; `aims publish` supplies the explicit integration context that permits the push.
+
+### `aims preflight [mode]`
+Reports the current Git repository root and selected mode. This lightweight probe is intended for agent startup checks and refuses execution outside a Git repository.
+
+### `aims version | -v | --version`
+Prints the engine version from `VERSION`.
+
+### `aims help | -h | --help`
+Prints the public command and environment-variable contract. Unknown options and surplus arguments are rejected with exit status `2` before command-specific mutations.

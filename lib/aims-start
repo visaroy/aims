@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
 set -euo pipefail
 project="${1:-}"; topic="${2:-}"; shift 2 || true
-[ -n "$project" ] && [ -n "$topic" ] || { echo "usage: aims-start <project> <topic> [agent] [--scope host:x,repo:y,...] [--continues-from session-id]" >&2; exit 2; }
+[ -n "$project" ] && [ -n "$topic" ] || { echo "usage: aims start <project> <topic> [agent] [--scope host:x,repo:y,...] [--continues-from session-id]" >&2; exit 2; }
 agent="opencode"; scope_csv=""; continues_from=""
 if [ $# -gt 0 ] && [ "${1#--}" = "$1" ]; then agent="$1"; shift; fi
 while [ $# -gt 0 ]; do
   case "$1" in
-    --scope) scope_csv="${2:-}"; shift 2;;
-    --continues-from) continues_from="${2:-}"; shift 2;;
+    --scope) scope_csv="${2:-}"; [ -n "$scope_csv" ] || { echo "usage: aims start <project> <topic> [agent] --scope <csv>" >&2; exit 2; }; shift 2;;
+    --continues-from) continues_from="${2:-}"; [ -n "$continues_from" ] || { echo "usage: aims start <project> <topic> [agent] --continues-from <session-id>" >&2; exit 2; }; shift 2;;
     *) echo "ERROR: unknown aims-start option: $1" >&2; exit 2;;
   esac
 done

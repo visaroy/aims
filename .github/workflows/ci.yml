@@ -1,0 +1,133 @@
+name: AIMS CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: aims-ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  quality:
+    name: Static quality and public artifacts
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Install quality tools
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y shellcheck
+          python3 -m pip install --disable-pip-version-check Pillow==12.2.0 PyYAML==6.0.3
+      - name: Validate shell syntax and warnings
+        run: |
+          mapfile -t shell_files < <(git ls-files 'bin/aims' '*.sh' 'lib/*')
+          bash -n "${shell_files[@]}"
+          shellcheck --severity=warning -x "${shell_files[@]}"
+      - name: Validate documentation and workflow YAML
+        run: |
+          python3 scripts/validate-docs.py
+          python3 scripts/validate-yaml.py
+      - name: Validate privacy and secrets
+        run: |
+          bash scripts/validate-public-privacy.sh .
+          bash lib/validate-no-secrets.sh .
+      - name: Reproduce the agent handoff demo
+        run: |
+          python3 scripts/generate-handoff-demo.py /tmp/aims-handoff-demo.gif
+          cmp /tmp/aims-handoff-demo.gif docs/assets/aims-handoff-demo.gif
+          python3 - <<'PY'
+          from PIL import Image
+          image = Image.open("docs/assets/aims-handoff-demo.gif")
+          durations = []
+          for frame in range(image.n_frames):
+              image.seek(frame)
+              durations.append(image.info.get("duration", 0))
+          assert image.size == (1200, 675), image.size
+          assert image.n_frames == 8, image.n_frames
+          assert sum(durations) == 30000, durations
+          print(f"OK: GIF {image.size[0]}x{image.size[1]}, {image.n_frames} frames, {sum(durations)} ms")
+          PY
+      - name: Check patch hygiene
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          BASE_REF: ${{ github.base_ref }}
+          BEFORE_SHA: ${{ github.event.before }}
+        run: |
+          if [ "$EVENT_NAME" = pull_request ]; then
+            git diff --check "origin/$BASE_REF...HEAD"
+          elif [ "$EVENT_NAME" = push ] && [ -n "$BEFORE_SHA" ] && [ "$BEFORE_SHA" != 0000000000000000000000000000000000000000 ]; then
+            git diff --check "$BEFORE_SHA" HEAD
+          else
+            empty_tree="$(git hash-object -t tree /dev/null)"
+            git diff --check "$empty_tree" HEAD
+          fi
+
+  tests-ubuntu:
+    name: Public CLI and lifecycle — Ubuntu
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - name: Run every public test
+        env:
+          BASH32: /bin/bash
+        run: |
+          count=0
+          for test_file in tests/*.sh; do
+            bash "$test_file"
+            count=$((count + 1))
+          done
+          printf 'ALL_TESTS_PASS count=%d\n' "$count"
+
+  tests-bash32:
+    name: Public CLI and lifecycle — Bash 3.2
+    runs-on: macos-latest
+    timeout-minutes: 25
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - name: Verify system Bash 3.2
+        run: /bin/bash --version | grep -F 'version 3.2'
+      - name: Run every public test with Bash 3.2
+        env:
+          BASH32: /bin/bash
+        run: |
+          count=0
+          for test_file in tests/*.sh; do
+            /bin/bash "$test_file"
+            count=$((count + 1))
+          done
+          printf 'ALL_BASH32_TESTS_PASS count=%d\n' "$count"
+
+  links:
+    name: Public documentation links
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - name: Check external links
+        uses: lycheeverse/lychee-action@e7477775783ea5526144ba13e8db5eec57747ce8 # v2
+        with:
+          args: --no-progress --max-retries 3 './**/*.md'
+          fail: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

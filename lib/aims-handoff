@@ -7,8 +7,10 @@ script_dir="$(cd "$(dirname "$0")" && pwd)"
 if [ "${1:-}" = check ]; then
   shift; root="${AIMS_ROOT:-$(cd "$(dirname "$0")/.." && pwd)}"; exec "$root/lib/aims-handoff-check" "$@"
 fi
-branch="$(git branch --show-current)"
+[ "$#" -le 2 ] || { echo "usage: aims handoff [<session-id>] [note]" >&2; exit 2; }
+branch="$(git branch --show-current 2>/dev/null || true)"
 if [[ "$branch" != ai/* && "${1:-}" =~ ^[A-Za-z0-9._-]+$ ]]; then
+  [ "$#" -le 2 ] || { echo "usage: aims handoff <session-id> [note]" >&2; exit 2; }
   requested="$1"; repo="${AIMS_HOME:-$HOME/.aims}"; target="$repo/.worktrees/$requested"
   [ -d "$target" ] || { echo "ERROR: no local AIMS worktree for session $requested" >&2; exit 2; }
   [ "$(git -C "$target" branch --show-current)" = "ai/$requested" ] || { echo "ERROR: worktree branch does not match session $requested" >&2; exit 2; }
@@ -16,12 +18,14 @@ if [[ "$branch" != ai/* && "${1:-}" =~ ^[A-Za-z0-9._-]+$ ]]; then
   shift; cd "$target"; exec "$0" "$@"
 fi
 [[ "$branch" == ai/* ]] || { echo "ERROR: aims handoff must run inside an ai/<session-id> worktree or from AIMS_HOME/.worktrees with a session id" >&2; exit 2; }
+[ "$#" -le 1 ] || { echo "usage: aims handoff [note]" >&2; exit 2; }
 sid="${branch#ai/}"
 [[ "$sid" =~ ^[A-Za-z0-9._-]+$ ]] || { echo "ERROR: unsafe session id: $sid" >&2; exit 2; }
 git remote get-url origin >/dev/null 2>&1 || { echo "ERROR: handoff needs an 'origin' remote — it pushes the session so another machine can adopt it. Add one:" >&2; echo "  git remote add origin <url> && git push -u origin main" >&2; exit 1; }
 note="${1:-}"                                                                    # optional handoff note (e.g. "waiting on OAuth client id")
 meta="sessions/work/$sid/metadata.json"
 [ -f "$meta" ] || { echo "ERROR: missing $meta — is this a session worktree?" >&2; exit 2; }
+"$script_dir/validate-no-secrets.sh"                                               # fail before metadata/worklog mutation or staging
 handoff_base_commit="$(git rev-parse HEAD)"
 remote_ref="refs/remotes/origin/$branch"
 had_remote=0

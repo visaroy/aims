@@ -2,67 +2,69 @@
 
 ## Scope
 
-This comparison evaluates the `session-handoff` skill in [Softaworks Agent Toolkit](https://github.com/softaworks/agent-toolkit/tree/main/skills/session-handoff) against AIMS `v0.6.0`.
+This comparison evaluates the `session-handoff` skill in [Softaworks Agent Toolkit](https://github.com/softaworks/agent-toolkit/tree/main/skills/session-handoff) against the current AIMS 0.7.0 implementation.
 
-Source reviewed: `softaworks/agent-toolkit` commit `3027f20f3181758385a1bb8c022d4041dfb4de84` on 2026-07-27.
+Sources reviewed:
+
+- `softaworks/agent-toolkit` commit `3027f20f3181758385a1bb8c022d4041dfb4de84` on 2026-07-27.
+- AIMS base commit `802a0434129ee372c68f2934e4dfdf23321124cf` plus the implementation changes documented in this comparison, reviewed together on 2026-07-28.
 
 ## Executive summary
 
-The Agent Toolkit skill provides a strong documentation-oriented handoff workflow. AIMS already solves the harder transport and coordination problem: preserving complete work in Git, transferring it through `origin`, and safely adopting it on another host or with another agent.
+The Agent Toolkit skill creates a structured Markdown handoff for a Claude-oriented workflow. AIMS manages the work itself: commits, metadata, worklog, optional brief, and session state move through a Git remote and can be adopted by a different agent on a different host.
 
-AIMS should borrow the skill's handoff-readiness and context-quality ideas, but retain its Git-native, agent-neutral architecture. It should not adopt a Claude-specific storage directory or rely on a heuristic quality score as a release gate.
+AIMS does not transfer an agent's private transcript or hidden reasoning. It transfers explicit artifacts that another agent can inspect and verify.
 
-## Comparison
+The previous version of this document listed readiness checks, adoption deltas, concise briefs, continuation metadata, and list filters as proposed work. AIMS 0.7.0 now implements all five.
 
-| Area | Agent Toolkit `session-handoff` | AIMS | Assessment |
+## Current comparison
+
+| Area | Agent Toolkit `session-handoff` | AIMS 0.7.0 | Assessment |
 |---|---|---|---|
-| Primary artifact | Timestamped Markdown under `.claude/handoffs/` | `ai/<session-id>` branch plus `metadata.json`, worklog, commands, tests, prompts, and final summary | AIMS has a more durable, agent-neutral artifact model. |
-| Creation | Python scaffold captures time, path, branch, recent commits, modified files, and optional predecessor | `aims start` creates an isolated worktree and session metadata, then pushes the branch | AIMS has stronger Git and isolation guarantees. |
-| Transfer | The document must be available in the project checkout; no remote transfer protocol | `aims handoff` commits, scans, pushes, and marks the session as released; `aims adopt` fetches it from `origin` | AIMS is designed for cross-host and cross-agent transfer. |
-| Concurrency | Manual process only | Adoption warns about a recently updated active branch; `status=handoff` explicitly releases the source writer | AIMS provides an explicit two-writer safety guard. |
-| Environment | Free-form Markdown section | Structured `environment` metadata plus toolchain probing and host recommendation during adoption | AIMS can verify more of the target environment. |
-| Secret handling | Regex scan of the handoff Markdown | Secret scan before checkpoints and handoffs, including tracked and untracked non-ignored files | AIMS has broader repository-level protection. |
-| Content validation | Checks TODO markers, required sections, referenced files, potential secrets, and a 0-100 score | Validates session identity, worktree, branch, metadata, origin, and secret safety; it does not assess handoff narrative completeness | The skill contributes useful quality checks. |
-| Staleness | Uses age, commits, changed files, branch mismatch, and missing references | `aims list` reports age; `aims adopt` detects a possible live writer | The skill contributes useful resume diagnostics. |
-| Lineage | Markdown links through `Continues from` and `Supersedes` | Git commit history preserves one session lifecycle; separate sessions have no explicit continuation field | Explicit cross-session lineage is a possible future enhancement. |
+| Primary artifact | Timestamped Markdown under `.claude/handoffs/` | `ai/<session-id>` branch plus metadata, worklog, commands, tests, prompts, final summary, and optional `handoff.md` | AIMS stores a complete, agent-neutral work record. |
+| Creation | Python scaffold captures time, path, branch, recent commits, modified files, and optional predecessor | `aims start` creates an isolated worktree, structured metadata, and a remote session branch; `--continues-from` records explicit lineage | Both capture context; AIMS also creates an isolated unit of work. |
+| Transfer | The handoff document must be present in the project checkout | `aims handoff` commits and pushes the complete worktree, records a Git boundary, and marks the writer as released | AIMS provides a remote transport and ownership transition. |
+| Adoption | A person or Claude reads the handoff document | `aims adopt` fetches from `origin`, probes the declared environment, reports the Git delta since handoff, and creates or verifies the exact session worktree | AIMS supports different agents and hosts without copying local transcripts. |
+| Concurrency | Manual process | Exact-OID leases, publication sentinels, rewrite markers, live-writer warnings, and deleted-branch guards preserve competing work | AIMS has stronger machine-enforced coordination. |
+| Rebase recovery | Outside the skill's scope | `aims rebase` rebases a synchronized session onto `origin/main`; `aims save` publishes the rewrite only when the captured remote OID still matches | AIMS handles a common multi-session integration failure explicitly. |
+| Readiness | Validates document sections, TODO markers, references, potential secrets, and a heuristic score | `aims handoff check` validates session identity, branch/worktree/origin state, metadata, secret safety, worklog guidance, and relevant environment fields | AIMS uses an advisory pass/warning/block model instead of a generic numeric score. |
+| Concise resume map | The handoff document is the main artifact | `aims brief <session-id>` creates an optional `handoff.md` while preserving the chronological worklog | AIMS supports both a durable log and a short resume map. |
+| Environment | Free-form Markdown | Structured `environment` metadata plus toolchain probes and local/remote recommendations during adoption | AIMS can verify target-host prerequisites. |
+| Secret handling | Regex scan of handoff Markdown | Repository scan before readiness checks and checkpoints, including tracked and untracked non-ignored files | AIMS checks a broader surface. |
+| Staleness and discovery | Age, commits, changed files, branch mismatch, missing references | `aims list` reports age and scope; `--handoff`, `--stale`, and `--project` filter remote sessions | Both help discovery; AIMS queries the shared Git source of truth. |
+| Lineage | Markdown `Continues from` and `Supersedes` links | `aims start --continues-from <session-id>` writes structured continuation metadata | AIMS now exposes cross-session lineage without changing normal handoff/adopt semantics. |
 
-## Useful ideas to adopt
+## Features added since the previous comparison
 
-### Handoff readiness report
-
-Add a non-mutating command such as:
+### Advisory readiness check
 
 ```bash
 aims handoff check <session-id>
 ```
 
-It should report whether the session has valid metadata and required artifacts, a complete environment declaration when relevant, a concrete next action or blocker, unresolved placeholders, a clean secret scan, and a branch/worktree/origin state that is safe to hand off.
+The command is non-mutating. It blocks invalid session identity, branch/worktree/origin errors, unreadable metadata, and detected secrets. Missing next actions or relevant environment fields produce warnings rather than an arbitrary score.
 
-Initially, this should be advisory. AIMS supports infrastructure, research, documentation, and code sessions, so a generic numeric quality threshold would be too rigid.
+### Git-native adoption delta
 
-### Git-native delta report during adoption
+`aims handoff` records `handoff_base_commit`. During adoption, AIMS reports the comparison boundary, commits since that boundary, and changed paths. The report uses Git ancestry rather than elapsed time alone.
 
-Extend `aims adopt` to show a concise report covering the last handoff time, commits since the handoff boundary, changed paths, current source branch state, and the latest session author or host.
+### Optional handoff brief
 
-The report should use Git ancestry and diffs rather than time alone. A possible metadata field is `handoff_base_commit`, recorded before the handoff commit and used as the base for later change reporting.
-
-### Optional concise handoff brief
-
-Add an optional artifact at:
-
-```text
-sessions/work/<session-id>/handoff.md
+```bash
+aims brief <session-id>
 ```
 
-AIMS should keep the existing worklog as a chronological record. The optional brief should be a compact resume map with current state, decisions and rationale, immediate next action, blockers, critical files or repositories, environment and verification state, and known risks.
+The command creates `sessions/work/<session-id>/handoff.md` from an English template and refuses to overwrite an existing brief.
 
-### Explicit cross-session continuation
+### Explicit continuation metadata
 
-For new sessions that genuinely continue a completed or paused session, an optional `continues_from` field in `metadata.json` could provide discoverable lineage. It is not needed for the normal `handoff` to `adopt` path because that remains one session branch.
+```bash
+aims start <project> <topic> <agent> --continues-from <session-id>
+```
+
+This records a relationship between separate sessions. A normal handoff and adoption remain one session branch and do not need a continuation link.
 
 ### Session-list filters
-
-Consider filters such as:
 
 ```bash
 aims list --handoff
@@ -70,19 +72,16 @@ aims list --stale
 aims list --project <project>
 ```
 
-These would provide the discoverability benefit of the toolkit's handoff listing without changing the AIMS storage model.
+The filters can be combined and operate on remote `ai/*` branches.
 
-## Ideas not to adopt directly
+## Design choices AIMS retains
 
-- Do not store AIMS handoffs under `.claude/handoffs/`; AIMS supports multiple agents and must remain agent-neutral.
-- Do not make a 0-100 documentation score a mandatory handoff gate; it is heuristic and easy to optimize superficially.
-- Do not treat missing source-code paths on the target host as an automatic handoff failure. Cross-host adoption may intentionally require remote mode or environment preparation.
-- Do not use elapsed time as the principal staleness signal when Git ancestry, branch divergence, and changed paths are available.
-- Do not replace AIMS secret scanning with document-only regex checks.
+- AIMS does not store handoffs under `.claude/`; the artifact format must work with Claude Code, Codex, opencode, Gemini, and future agents.
+- AIMS does not use a mandatory 0-100 narrative score. Infrastructure, research, documentation, and code sessions need different evidence.
+- Missing source paths on the adopting host are reported, not treated as automatic failure. The agent can prepare the host or use remote mode.
+- Git ancestry and exact remote OIDs determine safety. Time is only a live-writer warning and staleness signal.
+- The optional brief supplements the worklog and commits. It does not replace them.
 
-## Recommended implementation order
+## Remaining differences
 
-1. Add advisory `aims handoff check <session-id>` with portable Bash tests.
-2. Add Git-native post-handoff delta reporting to `aims adopt`.
-3. Add an optional English `handoff.md` template under the existing session artifact directory.
-4. Evaluate `continues_from` metadata and `aims list` filters after the first three changes are used in real sessions.
+The Agent Toolkit skill performs deeper prose-oriented checks within one handoff document, including placeholder and reference quality. AIMS checks operational readiness and repository safety, but its brief template remains intentionally lightweight. Teams that require stricter narrative fields can add project-specific checks without weakening AIMS's Git guards or agent-neutral storage model.

@@ -2,6 +2,7 @@
 set -euo pipefail
 # Scaffolds a fresh AIMS data repo: the private, per-user repo that AIMS operates on.
 # The ENGINE (this project) stays separate and public; the DATA repo is yours.
+[ "$#" -le 1 ] || { echo "usage: aims init [dir]" >&2; exit 2; }
 home="${1:-${AIMS_HOME:-$HOME/.aims}}"
 [ -e "$home/.git" ] && { echo "AIMS data repo already exists at $home"; exit 0; }
 mkdir -p "$home"/{sessions/work,.worktrees}

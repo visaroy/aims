@@ -5,7 +5,7 @@ set -euo pipefail
 # it must be mounted locally and pointed to by AIMS_ARTIFACTS. See docs/SHARED-STORE.md for backends
 # (NFS, SMB, GlusterFS, CephFS, MinIO, RustFS, Ceph RGW). Git keeps pointers; the store keeps bytes.
 sid="${1:-}"
-[ -n "$sid" ] || { echo "usage: aims artifacts <session-id>" >&2; exit 2; }
+[ -n "$sid" ] && [ "$#" -eq 1 ] || { echo "usage: aims artifacts <session-id>" >&2; exit 2; }
 sid="${sid#ai/}"
 [[ "$sid" =~ ^[A-Za-z0-9._-]+$ ]] || { echo "ERROR: unsafe session id: $sid" >&2; exit 2; }
 store="${AIMS_ARTIFACTS:-}"

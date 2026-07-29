@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 arg="${1:-}"
-[ -n "$arg" ] || { echo "usage: aims publish <session-id|ai/session-id>" >&2; exit 2; }
+[ -n "$arg" ] && [ "$#" -eq 1 ] || { echo "usage: aims publish <session-id|ai/session-id>" >&2; exit 2; }
 repo="${AIMS_HOME:-$HOME/.aims}"
 branch="$arg"; [[ "$branch" == ai/* ]] || branch="ai/$arg"
 sid="${branch#ai/}"
