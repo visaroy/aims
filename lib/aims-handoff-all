@@ -4,6 +4,7 @@ repo="${AIMS_HOME:-$HOME/.aims}"
 confirm="${1:-}"
 [ "$#" -le 1 ] && { [ -z "$confirm" ] || [ "$confirm" = --yes ]; } || { echo "usage: aims handoff-all [--yes]" >&2; exit 2; }
 git -C "$repo" rev-parse --is-inside-work-tree >/dev/null 2>&1 || { echo "ERROR: AIMS data repo not found: $repo" >&2; exit 1; }
+repo="$(git -C "$repo" rev-parse --show-toplevel)"  # canonical path matches `git worktree list`, including TMPDIR/symlink inputs
 git -C "$repo" remote get-url origin >/dev/null 2>&1 || { echo "ERROR: AIMS data repo has no origin; refusing to hand off local-only work" >&2; exit 1; }
 lib="${AIMS_ROOT:-$(cd "$(dirname "$0")/.." && pwd)}/lib"
 worktrees=()
