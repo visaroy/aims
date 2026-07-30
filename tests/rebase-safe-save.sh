@@ -82,7 +82,11 @@ test_sha256_initial_lease() {
     echo "SKIP: installed Git does not support SHA-256 repositories"
     return
   fi
-  git clone -q "$sha_remote" "$sha_data"
+  if ! git clone -q "$sha_remote" "$sha_data" 2>/dev/null; then
+    echo "SKIP: installed Git cannot clone SHA-256 repositories"
+    rm -rf "$sha_data"
+    return
+  fi
   git -C "$sha_data" config user.name "AIMS SHA-256 Test"
   git -C "$sha_data" config user.email "aims-sha256@example.invalid"
   printf '# SHA-256 test\n' > "$sha_data/README.md"
