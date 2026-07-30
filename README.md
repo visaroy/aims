@@ -3,7 +3,7 @@
 **AI Multi-agent Sessions** — git-native session management for AI coding agents,
 across many machines and many agents.
 
-![Version](https://img.shields.io/badge/Version-v0.7.0-blue) ![Last Update](https://img.shields.io/badge/Update-2026--07--28-orange) [![AIMS CI](https://github.com/visaroy/aims/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/visaroy/aims/actions/workflows/ci.yml) ![status](https://img.shields.io/badge/status-alpha-orange) ![license](https://img.shields.io/badge/license-MIT-blue) ![shell](https://img.shields.io/badge/shell-bash-121011)
+![Version](https://img.shields.io/badge/Version-v1.0.0--rc.1-blue) ![Last Update](https://img.shields.io/badge/Update-2026--07--30-orange) [![AIMS CI](https://github.com/visaroy/aims/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/visaroy/aims/actions/workflows/ci.yml) ![status](https://img.shields.io/badge/status-release--candidate-blue) ![license](https://img.shields.io/badge/license-MIT-blue) ![shell](https://img.shields.io/badge/shell-bash-121011)
 
 AIMS turns each unit of AI work into a **git branch in an isolated worktree**. Sessions can be
 **handed off** between machines and **adopted** by any agent — because the source of truth is a
@@ -11,6 +11,12 @@ git remote (`origin`), never a machine-to-machine link. No agent needs access to
 
 **You never learn AIMS commands.** Your agent does. You talk to it normally — *"save and close the
 session"*, *"hand this off to the other machine"* — and it runs AIMS for you.
+
+## Release candidate
+
+`v1.0.0-rc.1` is the release candidate for the AIMS `1.0` command-line contract. It preserves the
+documented Git-native lifecycle while the release is validated on independent installations. See the
+[CLI compatibility policy](docs/COMPATIBILITY.md) and the [acceptance test](docs/TESTING.md).
 
 ## Agent-to-agent handoff
 
@@ -194,7 +200,8 @@ aims publish <session-id>                        # merge to main, register, done
 
 See [`docs/COMMANDS.md`](docs/COMMANDS.md), [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md),
 [`docs/AIMS.md`](docs/AIMS.md), [`docs/AGENTS-MEMORY.md`](docs/AGENTS-MEMORY.md), and the
-[acceptance test](docs/TESTING.md), plus the [session handoff roadmap](docs/TODO.md).
+[acceptance test](docs/TESTING.md), [CLI compatibility policy](docs/COMPATIBILITY.md), and the
+[session handoff roadmap](docs/TODO.md).
 **Documentation language:** English is official; translations under
 [`docs/i18n/`](docs/i18n/).
 
