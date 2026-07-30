@@ -3,7 +3,7 @@
 **AI Multi-agent Sessions** — git-native session management for AI coding agents,
 across many machines and many agents.
 
-![Version](https://img.shields.io/badge/Version-v1.0.0-blue) ![Last Update](https://img.shields.io/badge/Update-2026--07--30-orange) [![AIMS CI](https://github.com/visaroy/aims/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/visaroy/aims/actions/workflows/ci.yml) ![status](https://img.shields.io/badge/status-stable-blue) ![license](https://img.shields.io/badge/license-MIT-blue) ![shell](https://img.shields.io/badge/shell-bash-121011)
+![Version](https://img.shields.io/badge/Version-v1.1.0-blue) ![Last Update](https://img.shields.io/badge/Update-2026--07--30-orange) [![AIMS CI](https://github.com/visaroy/aims/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/visaroy/aims/actions/workflows/ci.yml) ![status](https://img.shields.io/badge/status-stable-blue) ![license](https://img.shields.io/badge/license-MIT-blue) ![shell](https://img.shields.io/badge/shell-bash-121011)
 
 AIMS turns each unit of AI work into a **git branch in an isolated worktree**. Sessions can be
 **handed off** between machines and **adopted** by any agent — because the source of truth is a
@@ -14,9 +14,7 @@ session"*, *"hand this off to the other machine"* — and it runs AIMS for you.
 
 ## Stable release
 
-`v1.0.0` is the stable AIMS `1.0` command-line contract, verified through CI and an independent
-Ubuntu installation. See the [CLI compatibility policy](docs/COMPATIBILITY.md) and the
-[acceptance test](docs/TESTING.md).
+`v1.1.0` adds explicit closed-session discovery and safe continuation: published artifacts remain in `main`, `aims status` resolves their state, and `aims continue` starts a linked session from current `main`. See the [CLI compatibility policy](docs/COMPATIBILITY.md) and the [acceptance test](docs/TESTING.md).
 
 ## Agent-to-agent handoff
 

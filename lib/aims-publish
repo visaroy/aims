@@ -43,8 +43,22 @@ rm -rf "$pub"
 git -C "$repo" worktree add "$pub" -b "publish/$sid" origin/main
 pub_base="$(git -C "$pub" rev-parse HEAD)"   # base to detect an "empty" merge
 git -C "$pub" merge --no-ff "origin/$branch" -m "📝 session: merge $sid" || merge_fail
-if [ -z "$(git -C "$pub" diff --name-only "$pub_base" HEAD)" ]; then    # guard: an empty merge used to look like success.
+merged_changes="$(git -C "$pub" diff --name-only "$pub_base" HEAD)"
+if [ -z "$merged_changes" ]; then
   echo "WARNING: merge of $sid brought NO file changes — the session may not have pushed its work (aims save?). Verify before treating it as published." >&2
+fi
+if [ -f "$pub/sessions/work/$sid/metadata.json" ]; then
+  python3 - "$pub/sessions/work/$sid/metadata.json" <<'PY'
+import json,sys
+from datetime import datetime,timezone
+path=sys.argv[1]
+with open(path) as handle: metadata=json.load(handle)
+metadata['status']='published'
+metadata['published_at']=datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
+metadata['published_to']='origin/main'
+with open(path,'w') as handle: json.dump(metadata,handle,indent=2); handle.write('\n')
+PY
+  git -C "$pub" add "sessions/work/$sid/metadata.json" && git -C "$pub" commit -q -m "📝 session: mark $sid published"
 fi
 if [ -f "$pub/sessions/work/$sid/metadata.json" ] && ! grep -q "$sid" "$pub/SESSIONS.md" 2>/dev/null; then  # auto-append registry row unless the agent added one
   meta="$pub/sessions/work/$sid/metadata.json"
@@ -60,4 +74,8 @@ echo "--- merged to main (full session diff, not just the registry row):"
 git -C "$pub" diff --stat "$pub_base" HEAD 2>/dev/null | tail -25 || true
 git -C "$repo" worktree remove "$pub" --force
 [ -d "$agent_wt" ] && git -C "$repo" worktree remove "$agent_wt" --force || true
+git -C "$repo" fetch -q origin main
+if git -C "$repo" show-ref --verify --quiet "refs/heads/$branch" && git -C "$repo" merge-base --is-ancestor "$branch" origin/main; then
+  git -C "$repo" branch -D "$branch" >/dev/null
+fi
 echo "OK: published $sid to main"

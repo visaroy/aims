@@ -1,0 +1,19 @@
+#!/usr/bin/env bash
+set -euo pipefail
+arg="${1:-}"; [ -n "$arg" ] && [ "$#" -eq 1 ] || { echo "usage: aims status <session-id>" >&2; exit 2; }
+sid="${arg#ai/}"; [[ "$sid" =~ ^[A-Za-z0-9._-]+$ ]] || { echo "ERROR: unsafe session id: $sid" >&2; exit 2; }
+repo="${AIMS_HOME:-$HOME/.aims}"; branch="ai/$sid"
+git -C "$repo" fetch -q origin main
+if git -C "$repo" ls-remote --exit-code --heads origin "refs/heads/$branch" >/dev/null 2>&1; then
+  meta="$(git -C "$repo" show "origin/$branch:sessions/work/$sid/metadata.json" 2>/dev/null || echo '{}')"
+  status="$(printf '%s' "$meta" | python3 -c 'import json,sys; print(json.load(sys.stdin).get("status","active"))' 2>/dev/null || echo active)"
+  printf 'ACTIVE: session %s is on origin/%s (status=%s).\n' "$sid" "$branch" "$status"; exit 0
+fi
+meta="$(git -C "$repo" show "origin/main:sessions/work/$sid/metadata.json" 2>/dev/null || true)"
+[ -n "$meta" ] || { echo "NOT FOUND: session $sid is absent from origin and origin/main." >&2; exit 1; }
+metadata_status="$(printf '%s' "$meta" | python3 -c 'import json,sys; print(json.load(sys.stdin).get("status","legacy"))')"
+path="sessions/work/$sid/"
+printf 'PUBLISHED: session %s is closed in origin/main (status=published).\n' "$sid"
+[ "$metadata_status" = published ] || printf 'Legacy metadata status=%s; branch absence is authoritative.\n' "$metadata_status"
+printf 'Artifacts: %s\n' "$path"
+printf 'Use: aims continue %s <new-topic> [agent] --scope <scope>\n' "$sid"

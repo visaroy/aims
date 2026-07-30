@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+set -euo pipefail
+sid="${1:-}"; topic="${2:-}"; shift 2 || true
+[ -n "$sid" ] && [ -n "$topic" ] || { echo "usage: aims continue <published-session-id> <new-topic> [agent] [--scope <csv>]" >&2; exit 2; }
+[[ "$sid" =~ ^[A-Za-z0-9._-]+$ ]] || { echo "ERROR: unsafe session id: $sid" >&2; exit 2; }
+repo="${AIMS_HOME:-$HOME/.aims}"
+git -C "$repo" fetch -q origin main
+meta="$(git -C "$repo" show "origin/main:sessions/work/$sid/metadata.json" 2>/dev/null || true)"
+[ -n "$meta" ] || { echo "ERROR: $sid is not a published session in origin/main." >&2; exit 1; }
+project="$(printf '%s' "$meta" | python3 -c 'import json,sys; print(json.load(sys.stdin)["project"])')"
+if [ -n "${AIMS_ROOT:-}" ]; then lib="$AIMS_ROOT/lib"; else lib="$(cd "$(dirname "$0")" && pwd)"; fi
+exec "$lib/aims-start" "$project" "$topic" "$@" --continues-from "$sid"
