@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.1.0 — 2026-07-30
+- Published sessions are now first-class discoverable records: `aims status <id>` distinguishes active, published, and unknown IDs; `aims adopt <published-id>` explains the closed state instead of incorrectly claiming an invalid ID.
+- Added `aims continue <published-id> <topic>` to start a linked session from current `origin/main`, and `aims list --closed` to discover published session records without retaining stale work branches.
+- `aims publish` marks metadata as `published`, preserves committed artifacts in main, and removes a verified merged local session branch so local Git history no longer contradicts `aims list`.
+- Added `aims conflicts --scope` with deterministic exact and path-prefix overlap diagnostics for active remote sessions.
+- Added a disposable lifecycle regression covering publication, status, friendly adoption, continuation, closed listing, local-branch cleanup, and scope diagnostics.
+
 ## 1.0.0 — 2026-07-30
 - Promoted the independently tested `1.0` release to stable. The SHA-256 lease regression now skips only when the installed Git cannot clone or push SHA-256 repositories, while standard lifecycle coverage remains mandatory.
 - Added an exact 30-second, reproducible agent-centric handoff demo and a tracked disposable under-3-minute acceptance test covering the complete session lifecycle.

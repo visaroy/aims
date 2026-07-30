@@ -80,19 +80,19 @@ Commits and pushes one selected local session, or every valid local session with
 Creates an optional English `sessions/work/<session-id>/handoff.md` from the built-in template. It never overwrites an existing brief and does not replace the chronological `worklog.md`.
 
 ### `aims adopt <session-id> [--remote]`
-Fetches from origin, prints an **adoption report** (environment, Git-native handoff delta, host probe, and recommendation),
-creates a worktree from the existing branch, logs the takeover, and seeds the local publication
-sentinel. `--remote` = report only. Refuses a merged/absent session; warns on a recent (possibly live)
-writer unless `status=handoff`. The checkpoint push uses the exact OID observed during fetch; if it fails,
-adopt exits nonzero and retains the worktree for race recovery. Adopt requires the worktree to be
-exactly on `ai/<session-id>` and verifies the observed remote OID is an ancestor of that exact local
-branch/`HEAD` before editing or pushing; stale local branches and wrong worktrees are refused.
-Older sessions without a handoff boundary remain adoptable and report that detailed delta is unavailable.
+Fetches an active remote session, prints an **adoption report** (environment, Git-native handoff delta, host probe, and recommendation), creates a worktree from the existing branch, logs the takeover, and seeds the local publication sentinel. `--remote` = report only. A published session is not an error: adopt reports that its branch was intentionally removed and points to `aims continue`.
+
+### `aims status <session-id>`
+Resolves a session against the shared source of truth. It reports `ACTIVE` for an existing `origin/ai/<session-id>` branch, `PUBLISHED` when complete artifacts exist in `origin/main`, and `NOT FOUND` only when neither source contains the ID.
+
+### `aims continue <published-session-id> <new-topic> [agent] [--scope <csv>]`
+Creates a new worktree from current `origin/main`, preserves the original project, and records `continues_from` in its metadata. It deliberately does not recreate a closed branch on an obsolete base.
+
+### `aims conflicts --scope <csv>`
+Read-only diagnostic for writable scopes. Exact `repo:`, `file:`, `host:`, and `service:` scopes conflict when equal; `path:` scopes conflict only when equal or one is a parent of the other. A `SAFE` result has no overlapping active remote scope.
 
 ### `aims publish <session-id>`
-Merges the branch to `main`, appends a registry row to `SESSIONS.md`, deletes the branch. Refuses a
-dirty or unpushed worktree; warns on an empty merge; prints the full session diff. A session merge
-conflict points to `aims rebase`; a race while pushing `main` can be handled by retrying publish.
+Merges the branch to `main`, appends a registry row to `SESSIONS.md`, marks the committed metadata `published`, then deletes the remote branch, worktree, and verified merged local branch. Complete committed session artifacts remain in `origin/main`.
 
 `aims save` also keeps a private `refs/aims/published/<session-id>` publication sentinel. It survives
 tracking-ref pruning, so a previously published but remotely deleted session branch is never recreated
@@ -103,8 +103,8 @@ Prints (and creates) the session's directory in the shared large-file store. Req
 `AIMS_ARTIFACTS` to point at a mounted store — see [SHARED-STORE.md](SHARED-STORE.md). Git keeps
 pointers; the store keeps bytes.
 
-### `aims list [--handoff] [--stale] [--project <project>]`
-Lists active `ai/*` branches with project, handoff status, age, scope, and a STALE flag (>48h). Filters are read-only and may be combined.
+### `aims list [--handoff] [--stale] [--closed] [--project <project>]`
+Lists active `ai/*` branches with project, handoff status, age, scope, and a STALE flag (>48h). `--closed` reads published metadata from `origin/main`; filters are read-only and may be combined.
 
 ### `aims doctor`
 Checks git/bash/python3, the data repo, registry, and origin remote.

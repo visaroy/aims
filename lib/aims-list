@@ -1,14 +1,27 @@
 #!/usr/bin/env bash
 set -euo pipefail
-repo="${AIMS_HOME:-$HOME/.aims}"; now="$(date -u +%s)"; handoff=0; stale=0; project=""
+repo="${AIMS_HOME:-$HOME/.aims}"; now="$(date -u +%s)"; handoff=0; stale=0; closed=0; project=""
 while [ $# -gt 0 ]; do
   case "$1" in
     --handoff) handoff=1; shift;;
     --stale) stale=1; shift;;
-    --project) project="${2:-}"; [ -n "$project" ] || { echo 'usage: aims list [--handoff] [--stale] [--project <project>]' >&2; exit 2; }; shift 2;;
-    *) echo "usage: aims list [--handoff] [--stale] [--project <project>]" >&2; exit 2;;
+    --closed) closed=1; shift;;
+    --project) project="${2:-}"; [ -n "$project" ] || { echo 'usage: aims list [--handoff] [--stale] [--closed] [--project <project>]' >&2; exit 2; }; shift 2;;
+    *) echo "usage: aims list [--handoff] [--stale] [--closed] [--project <project>]" >&2; exit 2;;
   esac
 done
+if [ "$closed" = 1 ]; then
+  git -C "$repo" fetch -q origin main
+  while read -r meta_path; do
+    meta="$(git -C "$repo" show "origin/main:$meta_path")"
+    fields="$(printf '%s' "$meta" | python3 -c 'import json,sys; m=json.load(sys.stdin); print(m.get("session_id","")); print(m.get("project","")); print(m.get("status",""))')"
+    sid="$(printf '%s\n' "$fields" | sed -n '1p')"; item_project="$(printf '%s\n' "$fields" | sed -n '2p')"
+    [ -z "$project" ] || [ "$item_project" = "$project" ] || continue
+    if git -C "$repo" ls-remote --exit-code --heads origin "refs/heads/ai/$sid" >/dev/null 2>&1; then continue; fi
+    printf 'published/%s  project=%s  status=published\n' "$sid" "$item_project"
+  done < <(git -C "$repo" ls-tree -r --name-only origin/main sessions/work | grep '/metadata.json$' || true)
+  exit 0
+fi
 git -C "$repo" fetch origin '+refs/heads/ai/*:refs/remotes/origin/ai/*' --prune -q 2>/dev/null || true
 while read -r br; do
   sid="${br#ai/}"; ts="${sid%%-*}"

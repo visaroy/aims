@@ -10,7 +10,7 @@ AIMS_ROOT="$(cd -P "$(dirname "$SOURCE")/.." && pwd)"
 export AIMS_ROOT
 cmd="${1:-help}"; [ $# -gt 0 ] && shift || true
 case "$cmd" in
-  start|save|handoff|handoff-all|checkpoint|adopt|publish|list|brief|rebase) exec "$AIMS_ROOT/lib/aims-$cmd" "$@" ;;
+  start|save|handoff|handoff-all|checkpoint|adopt|publish|list|brief|rebase|status|continue|conflicts) exec "$AIMS_ROOT/lib/aims-$cmd" "$@" ;;
   init)      exec "$AIMS_ROOT/lib/aims-init" "$@" ;;
   artifacts) exec "$AIMS_ROOT/lib/aims-artifacts" "$@" ;;
   wire-agents) exec "$AIMS_ROOT/lib/aims-wire-agents" "$@" ;;
@@ -39,10 +39,14 @@ usage: aims <command> [args]
   checkpoint <session-id> Save and push one local session without handoff
   brief <session-id>    Create an optional concise handoff brief
   rebase <session-id|ai/session-id>  Rebase a clean session onto origin/main
-  adopt <session-id> [--remote]   Take over a session from origin
-  publish <session-id>  Merge session to main, append registry, delete branch
-  list [--handoff] [--stale] [--project <project>]
-                        List and filter active remote sessions
+  adopt <session-id> [--remote]   Take over an active session from origin
+  status <session-id>             Resolve active, published, or unknown session state
+  continue <published-id> <topic> [agent] [--scope ...]
+                        Start a new session from current main with recorded lineage
+  conflicts --scope <csv>         Explain writable-scope overlaps with active remote sessions
+  publish <session-id>  Merge session to main, retain artifacts, delete branch
+  list [--handoff] [--stale] [--closed] [--project <project>]
+                        List active remote sessions or published session records
   artifacts <id>        Print/create the session dir in the shared store (AIMS_ARTIFACTS)
   doctor                Health-check the install and data repo
   wire-agents           Teach installed agents to understand AIMS (writes their rule files)

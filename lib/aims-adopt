@@ -11,7 +11,16 @@ branch="$arg"; [[ "$branch" == ai/* ]] || branch="ai/$arg"
 sid="${branch#ai/}"
 [[ "$sid" =~ ^[A-Za-z0-9._-]+$ ]] || { echo "ERROR: unsafe session id: $sid" >&2; exit 2; }
 wt="$repo/.worktrees/$sid"
-git -C "$repo" fetch -q origin main "$branch" 2>/dev/null || { echo "ERROR: no branch origin/$branch (wrong session id?)" >&2; exit 1; }
+git -C "$repo" fetch -q origin main
+if ! git -C "$repo" fetch -q origin "$branch" 2>/dev/null; then
+  if git -C "$repo" show "origin/main:sessions/work/$sid/metadata.json" >/dev/null 2>&1; then
+    echo "CLOSED: session $sid was published to origin/main; its remote work branch was intentionally removed."
+    echo "Artifacts: sessions/work/$sid/"
+    echo "Continue from current main with: aims continue $sid <new-topic> [agent] --scope <scope>"
+    exit 0
+  fi
+  echo "NOT FOUND: no remote session branch or published session matches $sid." >&2; exit 1
+fi
 remote_oid="$(git -C "$repo" rev-parse "origin/$branch")"
 ahead=$(git -C "$repo" rev-list --count "origin/$branch" ^origin/main)
 [ "$ahead" = "0" ] && { echo "REFUSE: $sid is already merged to main (0 commits ahead) — nothing to adopt." >&2; exit 1; }
