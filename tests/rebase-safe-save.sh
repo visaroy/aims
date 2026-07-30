@@ -93,7 +93,11 @@ test_sha256_initial_lease() {
   git -C "$sha_data" add README.md
   git -C "$sha_data" commit -q -m 'initialize SHA-256 main'
   git -C "$sha_data" branch -M main
-  git -C "$sha_data" push -q -u origin main
+  if ! git -C "$sha_data" push -q -u origin main >/dev/null 2>&1; then
+    echo "SKIP: installed Git cannot push SHA-256 repositories"
+    rm -rf "$sha_data"
+    return
+  fi
   git -C "$sha_remote" symbolic-ref HEAD refs/heads/main
   expect_success "SHA-256 initial session lease" env AIMS_HOME="$sha_data" "$AIMS" start sha256 initial-lease test-agent
   git -C "$sha_remote" for-each-ref --format='%(refname)' refs/heads/ai/ | grep -q '^refs/heads/ai/' || fail "SHA-256 start did not create a remote session branch"
