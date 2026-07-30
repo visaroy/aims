@@ -1,6 +1,6 @@
 # Test AIMS in under 3 minutes
 
-**Last updated**: 2026-07-28
+**Last updated**: 2026-07-30
 
 This page separates the automated acceptance test that an agent runs from the decisions and observations that belong to a human tester. The automated test simulates two machines and two agents using disposable local directories. It exercises the complete AIMS lifecycle without reading or changing the tester's normal `HOME`, Git configuration, `~/.aims`, agent configuration files, or a real remote repository.
 
@@ -70,4 +70,4 @@ Never use a production code repository for a first test. Do not include credenti
 
 ### Report feedback
 
-Open an [AIMS release candidate feedback issue](https://github.com/visaroy/aims/issues/new?template=tester-feedback.yml). Include the AIMS version, OS, Bash version, agents, topology, exact lifecycle steps, and sanitized diagnostics. Report suspected vulnerabilities through a [private GitHub security advisory](https://github.com/visaroy/aims/security/advisories/new).
+Open an [AIMS feedback issue](https://github.com/visaroy/aims/issues/new?template=tester-feedback.yml). Include the AIMS version, OS, Bash version, agents, topology, exact lifecycle steps, and sanitized diagnostics. Report suspected vulnerabilities through a [private GitHub security advisory](https://github.com/visaroy/aims/security/advisories/new).

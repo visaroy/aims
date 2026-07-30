@@ -1,4 +1,4 @@
-name: AIMS release candidate feedback
+name: AIMS feedback
 description: Report a reproducible bug, workflow problem, successful handoff, or usability issue found while testing AIMS.
 title: "[Tester feedback]: "
 labels:
@@ -34,7 +34,7 @@ body:
     attributes:
       label: AIMS version
       description: Run `aims version`. Enter `unknown` if the command cannot run.
-      placeholder: 1.0.0-rc.1
+      placeholder: 1.0.0
     validations:
       required: true
   - type: dropdown

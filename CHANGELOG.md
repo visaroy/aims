@@ -1,6 +1,7 @@
 # Changelog
 
-## 1.0.0-rc.1 — 2026-07-30
+## 1.0.0 — 2026-07-30
+- Promoted the independently tested `1.0` release to stable. The SHA-256 lease regression now skips only when the installed Git cannot clone or push SHA-256 repositories, while standard lifecycle coverage remains mandatory.
 - Added an exact 30-second, reproducible agent-centric handoff demo and a tracked disposable under-3-minute acceptance test covering the complete session lifecycle.
 - Added GitHub Actions quality, Ubuntu lifecycle, macOS Bash 3.2, and external-link jobs with a real status badge in the README.
 - Added a public CLI contract test; documented commands now reject unknown flags and surplus arguments with exit status 2 before mutation.
