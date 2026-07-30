@@ -200,6 +200,7 @@ aims publish <session-id>                        # merge to main, register, done
 
 See [`docs/COMMANDS.md`](docs/COMMANDS.md), [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md),
 [`docs/AIMS.md`](docs/AIMS.md), [`docs/AGENTS-MEMORY.md`](docs/AGENTS-MEMORY.md), and the
+[agent integration strategy](docs/AGENT-INTEGRATION-STRATEGY.md). Also see the
 [acceptance test](docs/TESTING.md), [CLI compatibility policy](docs/COMPATIBILITY.md), and the
 [session handoff roadmap](docs/TODO.md).
 **Documentation language:** English is official; translations under
