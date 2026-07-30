@@ -1,8 +1,8 @@
 # AIMS CLI compatibility
 
-## `v1.0.0-rc.1` public contract
+## `v1.0.0` public contract
 
-AIMS `v1.0.0-rc.1` is a release candidate for the `1.0` command-line contract. The supported public command names, documented arguments, environment variables, lifecycle order, and safety guarantees are the ones printed by `aims help` and described in [COMMANDS.md](COMMANDS.md).
+AIMS `v1.0.0` is the stable `1.0` command-line contract. The supported public command names, documented arguments, environment variables, lifecycle order, and safety guarantees are the ones printed by `aims help` and described in [COMMANDS.md](COMMANDS.md).
 
 The contract covers these commands: `init`, `start`, `save`, `rebase`, `handoff`, `checkpoint`, `brief`, `adopt`, `publish`, `list`, `artifacts`, `doctor`, `wire-agents`, `install-hooks`, `preflight`, `version`, and `help`.
 
@@ -16,9 +16,7 @@ For the commands and options documented in `COMMANDS.md`, AIMS guarantees that:
 
 ## Compatibility policy
 
-During the release-candidate period, fixes may strengthen validation, diagnostics, documentation, and test coverage without intentionally changing a documented valid invocation. New optional commands or options may be added without changing existing command semantics.
-
-The stable `v1.0.0` release will preserve this documented command surface. After `v1.0.0`, an incompatible change to a documented command name, required argument, option, exit-status contract, or lifecycle guarantee requires a major version increment and a migration note in `CHANGELOG.md`.
+The stable `v1.0.0` release preserves this documented command surface. After `v1.0.0`, an incompatible change to a documented command name, required argument, option, exit-status contract, or lifecycle guarantee requires a major version increment and a migration note in `CHANGELOG.md`.
 
 ## Scope
 
