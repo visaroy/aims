@@ -29,7 +29,7 @@ Git-native session management for AI agents across machines.
 usage: aims <command> [args]
 
   init [dir]            Scaffold a data repo (default: $AIMS_HOME or ~/.aims)
-  start <proj> <topic> [agent] [--scope ...] [--continues-from <id>]
+  start <proj> <topic> [agent] [--scope ...] [--continues-from <id>] [--parent-session <id>]
                         Start a session (branch + worktree)
   save                  Checkpoint: commit whole worktree + push (run in worktree)
   handoff [note]        Hand session from its worktree (push all + mark)
@@ -43,7 +43,8 @@ usage: aims <command> [args]
   status <session-id>             Resolve active, published, or unknown session state
   continue <published-id> <topic> [agent] [--scope ...]
                         Start a new session from current main with recorded lineage
-  conflicts --scope <csv>         Explain writable-scope overlaps with active remote sessions
+  conflicts --scope <csv> [--session <id>]
+                        Explain writable-scope overlaps with active remote sessions
   publish <session-id>  Merge session to main, retain artifacts, delete branch
   list [--handoff] [--stale] [--closed] [--project <project>]
                         List active remote sessions or published session records

@@ -27,11 +27,11 @@ while read -r br; do
   sid="${br#ai/}"; ts="${sid%%-*}"
   start="$(date -ju -f '%Y%m%dT%H%M%SZ' "$ts" +%s 2>/dev/null || date -u -d "${ts:0:8} ${ts:9:2}:${ts:11:2}:${ts:13:2}" +%s 2>/dev/null || echo "$now")"
   age_h=$(( (now - start) / 3600 )); meta="$(git -C "$repo" show "origin/$br:sessions/work/$sid/metadata.json" 2>/dev/null || echo '{}')"
-  fields="$(printf '%s' "$meta" | python3 -c 'import json,sys; m=json.load(sys.stdin); print(m.get("status","")); print(m.get("project","")); print(",".join(m.get("scope",[])) or "-")' 2>/dev/null || printf '\n\n-')"
-  status="$(printf '%s\n' "$fields" | sed -n '1p')"; item_project="$(printf '%s\n' "$fields" | sed -n '2p')"; scope="$(printf '%s\n' "$fields" | sed -n '3p')"
+  fields="$(printf '%s' "$meta" | python3 -c 'import json,sys; m=json.load(sys.stdin); print(m.get("status","")); print(m.get("project","")); print(",".join(m.get("scope",[])) or "-"); print(m.get("parent_session","-"))' 2>/dev/null || printf '\n\n-\n-')"
+  status="$(printf '%s\n' "$fields" | sed -n '1p')"; item_project="$(printf '%s\n' "$fields" | sed -n '2p')"; scope="$(printf '%s\n' "$fields" | sed -n '3p')"; parent_session="$(printf '%s\n' "$fields" | sed -n '4p')"
   [ "$handoff" = 0 ] || [ "$status" = handoff ] || continue
   [ "$stale" = 0 ] || [ "$age_h" -ge 48 ] || continue
   [ -z "$project" ] || [ "$item_project" = "$project" ] || continue
   flag=""; [ "$age_h" -ge 48 ] && flag="  ⚠️ STALE(>48h — publish or delete)"
-  printf '%s  project=%s  status=%s  age=%sh  scope=%s%s\n' "$br" "${item_project:--}" "${status:--}" "$age_h" "$scope" "$flag"
+  printf '%s  project=%s  status=%s  age=%sh  scope=%s  parent=%s%s\n' "$br" "${item_project:--}" "${status:--}" "$age_h" "$scope" "${parent_session:--}" "$flag"
 done < <(git -C "$repo" ls-remote --heads origin 'refs/heads/ai/*' 2>/dev/null | sed 's#.*refs/heads/##' | sort)
