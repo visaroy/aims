@@ -1,17 +1,19 @@
 #!/usr/bin/env bash
 set -euo pipefail
 project="${1:-}"; topic="${2:-}"; shift 2 || true
-[ -n "$project" ] && [ -n "$topic" ] || { echo "usage: aims start <project> <topic> [agent] [--scope host:x,repo:y,...] [--continues-from session-id]" >&2; exit 2; }
-agent="opencode"; scope_csv=""; continues_from=""
+[ -n "$project" ] && [ -n "$topic" ] || { echo "usage: aims start <project> <topic> [agent] [--scope host:x,repo:y,...] [--continues-from session-id] [--parent-session session-id]" >&2; exit 2; }
+agent="opencode"; scope_csv=""; continues_from=""; parent_session=""
 if [ $# -gt 0 ] && [ "${1#--}" = "$1" ]; then agent="$1"; shift; fi
 while [ $# -gt 0 ]; do
   case "$1" in
     --scope) scope_csv="${2:-}"; [ -n "$scope_csv" ] || { echo "usage: aims start <project> <topic> [agent] --scope <csv>" >&2; exit 2; }; shift 2;;
     --continues-from) continues_from="${2:-}"; [ -n "$continues_from" ] || { echo "usage: aims start <project> <topic> [agent] --continues-from <session-id>" >&2; exit 2; }; shift 2;;
+    --parent-session) parent_session="${2:-}"; [ -n "$parent_session" ] || { echo "usage: aims start <project> <topic> [agent] --parent-session <session-id>" >&2; exit 2; }; shift 2;;
     *) echo "ERROR: unknown aims-start option: $1" >&2; exit 2;;
   esac
 done
 [ -z "$continues_from" ] || [[ "$continues_from" =~ ^[A-Za-z0-9._-]+$ ]] || { echo "ERROR: unsafe predecessor session id: $continues_from" >&2; exit 2; }
+[ -z "$parent_session" ] || [[ "$parent_session" =~ ^[A-Za-z0-9._-]+$ ]] || { echo "ERROR: unsafe parent session id: $parent_session" >&2; exit 2; }
 repo="${AIMS_HOME:-$HOME/.aims}"
 git -C "$repo" remote get-url origin >/dev/null 2>&1 || { echo "ERROR: data repo $repo has no 'origin' remote. AIMS syncs sessions through origin; add one first:" >&2; echo "  git -C \"$repo\" remote add origin <url> && git -C \"$repo\" push -u origin main" >&2; exit 1; }
 if [ -n "${AIMS_ROOT:-}" ]; then AIMS_LIB="$AIMS_ROOT/lib"; else AIMS_LIB="$(cd "$(dirname "$0")" && pwd)"; fi   # engine = directory of this script
@@ -25,6 +27,19 @@ wt="$repo/.worktrees/$sid"
 scope_json="[]"
 [ -n "$scope_csv" ] && scope_json="[$(printf '%s' "$scope_csv" | sed -E 's/[[:space:]]//g; s/([^,]+)/"\1"/g')]"  # csv -> JSON array
 git -C "$repo" fetch origin main
+[ -z "$parent_session" ] || {
+  git -C "$repo" fetch -q origin "refs/heads/ai/$parent_session:refs/remotes/origin/ai/$parent_session" || { echo "ERROR: parent session is not active: $parent_session" >&2; exit 1; }
+  parent_meta="$(git -C "$repo" show "origin/ai/$parent_session:sessions/work/$parent_session/metadata.json" 2>/dev/null)" || { echo "ERROR: parent session metadata is unavailable: $parent_session" >&2; exit 1; }
+  parent_status="$(printf '%s' "$parent_meta" | python3 -c 'import json,sys; print(json.load(sys.stdin).get("status", ""))')" || { echo "ERROR: parent session metadata is invalid: $parent_session" >&2; exit 1; }
+  [ "$parent_status" = active ] || { echo "ERROR: parent session is not active: $parent_session (status=$parent_status)" >&2; exit 1; }
+  if [ -n "$scope_csv" ]; then
+    related="$("$AIMS_LIB/aims-conflicts" --scope "$scope_csv" --session "$parent_session" || true)"
+    reuse_session="$(printf '%s\n' "$related" | sed -n '/^REUSE_CHILD_SESSION=/{s/^REUSE_CHILD_SESSION=//;p;q;}')"
+    [ -z "$reuse_session" ] || { printf '%s\n' "$related" >&2; printf 'ERROR: overlapping child session already exists; reuse it instead of creating another writer.\nREUSE_CHILD_SESSION=%s\n' "$reuse_session" >&2; exit 1; }
+    external_conflict="$(printf '%s\n' "$related" | sed -n '/^CONFLICT:/{p;q;}')"
+    [ -z "$external_conflict" ] || { printf '%s\n' "$related" >&2; echo 'ERROR: overlapping active session prevents a parented child writer.' >&2; exit 1; }
+  fi
+}
 aims_assert_remote_absent "$(git -C "$repo" remote get-url origin)" "$branch"
 git -C "$repo" worktree add "$wt" -b "$branch" origin/main
 mkdir -p "$wt/sessions/work/$sid"
@@ -45,7 +60,7 @@ cat > "$wt/sessions/work/$sid/metadata.json" <<JSON
     "exec_host": "",
     "setup": "",
     "test": ""
-  }$( [ -n "$continues_from" ] && printf ',\n  "continues_from": "%s"' "$continues_from" )
+  }$( [ -n "$continues_from" ] && printf ',\n  "continues_from": "%s"' "$continues_from" )$( [ -n "$parent_session" ] && printf ',\n  "parent_session": "%s"' "$parent_session" )
 }
 JSON
 touch "$wt/sessions/work/$sid/worklog.md" "$wt/sessions/work/$sid/commands.md" "$wt/sessions/work/$sid/tests.md" "$wt/sessions/work/$sid/final-summary.md" "$wt/sessions/work/$sid/prompt-log.md"

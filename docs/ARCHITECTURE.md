@@ -30,4 +30,5 @@ aims start ─▶ work + aims save (checkpoint) ─┬─▶ aims handoff ─▶
 | Local commits invisible to publish | `aims save` always pushes when ahead; publish refuses unpushed |
 | "Empty" merge looks like success | publish warns + prints the full session diff |
 | Two agents on one branch | adopt warns on recent activity; handoff marks release |
+| Two delegated writers in one scope | parented children reject every overlap; an overlapping sibling additionally returns its reusable child session ID |
 | Accidental push to main | `pre-push` hook blocks it |

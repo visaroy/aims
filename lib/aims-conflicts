@@ -1,24 +1,39 @@
 #!/usr/bin/env bash
 set -euo pipefail
-[ "${1:-}" = --scope ] && [ -n "${2:-}" ] && [ "$#" -eq 2 ] || { echo "usage: aims conflicts --scope <csv>" >&2; exit 2; }
-repo="${AIMS_HOME:-$HOME/.aims}"; requested="$2"; git -C "$repo" fetch -q origin '+refs/heads/ai/*:refs/remotes/origin/ai/*' --prune 2>/dev/null || true
+requested=""; context_session=""
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --scope) requested="${2:-}"; [ -n "$requested" ] || { echo "usage: aims conflicts --scope <csv> [--session <session-id>]" >&2; exit 2; }; shift 2;;
+    --session) context_session="${2:-}"; [ -n "$context_session" ] || { echo "usage: aims conflicts --scope <csv> [--session <session-id>]" >&2; exit 2; }; shift 2;;
+    *) echo "usage: aims conflicts --scope <csv> [--session <session-id>]" >&2; exit 2;;
+  esac
+done
+[ -n "$requested" ] || { echo "usage: aims conflicts --scope <csv> [--session <session-id>]" >&2; exit 2; }
+[ -z "$context_session" ] || [[ "$context_session" =~ ^[A-Za-z0-9._-]+$ ]] || { echo "ERROR: unsafe context session id: $context_session" >&2; exit 2; }
+repo="${AIMS_HOME:-$HOME/.aims}"; git -C "$repo" fetch -q origin '+refs/heads/ai/*:refs/remotes/origin/ai/*' --prune 2>/dev/null || true
 matches=0
 while read -r branch; do
   sid="${branch#ai/}"; meta="$(git -C "$repo" show "origin/$branch:sessions/work/$sid/metadata.json" 2>/dev/null || echo '{}')"
-  result="$(META="$meta" python3 - "$requested" "$sid" <<'PY'
+  result="$(META="$meta" python3 - "$requested" "$sid" "$context_session" <<'PY'
 import json,os,sys
-requested=set(filter(None,sys.argv[1].split(','))); sid=sys.argv[2]
-try: active=set(json.loads(os.environ['META']).get('scope',[]))
-except Exception: active=set()
+requested=set(filter(None,sys.argv[1].split(','))); sid=sys.argv[2]; context=sys.argv[3]
+try: metadata=json.loads(os.environ['META']); active=set(metadata.get('scope',[]))
+except Exception: metadata={}; active=set()
 def overlaps(a,b):
     if a==b: return True
+    if ':' not in a or ':' not in b: return False
     ta,va=a.split(':',1); tb,vb=b.split(':',1)
     if ta!=tb: return False
     if ta=='path': return va.startswith(vb.rstrip('/')+'/') or vb.startswith(va.rstrip('/')+'/')
     return ta in {'repo','file','host','service'} and va==vb
+if sid == context: raise SystemExit
 for a in sorted(requested):
     for b in sorted(active):
-        if overlaps(a,b): print(f'CONFLICT: {sid} requested={a} active={b}')
+        if not overlaps(a,b): continue
+        if context and metadata.get('parent_session') == context:
+            print(f'RELATED_CHILD: {sid} parent={context} requested={a} active={b}')
+            print(f'REUSE_CHILD_SESSION={sid}')
+        else: print(f'CONFLICT: {sid} requested={a} active={b}')
 PY
 )"
   [ -z "$result" ] || { printf '%s\n' "$result"; matches=1; }

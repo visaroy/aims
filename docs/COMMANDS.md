@@ -6,11 +6,15 @@ All commands operate on `AIMS_HOME` (default `~/.aims`). Session ids are
 ### `aims init [dir]`
 Scaffold a data repo: `sessions/work/`, `.worktrees/`, `SESSIONS.md`, gitignored `credentials/`.
 
-### `aims start <project> <topic> [agent] [--scope host:x,repo:y,...] [--continues-from <session-id>]`
+### `aims start <project> <topic> [agent] [--scope host:x,repo:y,...] [--continues-from <session-id>] [--parent-session <session-id>]`
 Creates branch `ai/<id>` + worktree from `origin/main`, seeds `metadata.json` (incl. empty
 `environment` block), verifies the branch is absent, pushes the start commit with a zero-OID lease,
 and seeds the local `refs/aims/published/<id>` sentinel. `--continues-from` records an optional
 validated predecessor session ID; it does not replace normal handoff/adopt of the same session branch.
+`--parent-session` records an active parent session for a delegated child writer. Before creating the
+child, AIMS rejects any overlapping active writer. A direct sibling additionally prints
+`REUSE_CHILD_SESSION=<id>`; reuse that child session rather than creating a second writer. Parent/child
+lineage never makes unrelated writers safe.
 
 ### `aims save`  *(run inside a worktree)*
 Scans tracked and untracked non-ignored files for secret patterns before mutation, then runs
@@ -88,8 +92,11 @@ Resolves a session against the shared source of truth. It reports `ACTIVE` for a
 ### `aims continue <published-session-id> <new-topic> [agent] [--scope <csv>]`
 Creates a new worktree from current `origin/main`, preserves the original project, and records `continues_from` in its metadata. It deliberately does not recreate a closed branch on an obsolete base.
 
-### `aims conflicts --scope <csv>`
+### `aims conflicts --scope <csv> [--session <session-id>]`
 Read-only diagnostic for writable scopes. Exact `repo:`, `file:`, `host:`, and `service:` scopes conflict when equal; `path:` scopes conflict only when equal or one is a parent of the other. A `SAFE` result has no overlapping active remote scope.
+With `--session`, that active context session is excluded from its own diagnostic. An overlapping direct
+child is reported as `RELATED_CHILD` plus `REUSE_CHILD_SESSION=<id>`; it is still a writer conflict to
+reuse, not a safe concurrent session. All unrelated overlaps remain `CONFLICT`.
 
 ### `aims publish <session-id>`
 Merges the branch to `main`, appends a registry row to `SESSIONS.md`, marks the committed metadata `published`, then deletes the remote branch, worktree, and verified merged local branch. Complete committed session artifacts remain in `origin/main`.
@@ -104,7 +111,7 @@ Prints (and creates) the session's directory in the shared large-file store. Req
 pointers; the store keeps bytes.
 
 ### `aims list [--handoff] [--stale] [--closed] [--project <project>]`
-Lists active `ai/*` branches with project, handoff status, age, scope, and a STALE flag (>48h). `--closed` reads published metadata from `origin/main`; filters are read-only and may be combined.
+Lists active `ai/*` branches with project, handoff status, age, scope, parent lineage, and a STALE flag (>48h). `--closed` reads published metadata from `origin/main`; filters are read-only and may be combined.
 
 ### `aims doctor`
 Checks git/bash/python3, the data repo, registry, and origin remote.
