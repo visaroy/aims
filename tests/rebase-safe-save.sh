@@ -99,15 +99,19 @@ test_sha256_initial_lease() {
     return
   fi
   git -C "$sha_remote" symbolic-ref HEAD refs/heads/main
-  expect_success "SHA-256 initial session lease" env AIMS_HOME="$sha_data" "$AIMS" start sha256 initial-lease test-agent
+  expect_success "SHA-256 initial session lease" env AIMS_HOME="$sha_data" "$AIMS" start sha256 initial-lease test-agent --scope path:sha256
   git -C "$sha_remote" for-each-ref --format='%(refname)' refs/heads/ai/ | grep -q '^refs/heads/ai/' || fail "SHA-256 start did not create a remote session branch"
   pass "initial creation uses the repository object format for the zero-OID lease"
 }
 
 make_session() {
-  sid="$1"
+  sid="$1"; wt="$CLONE_A/.worktrees/$sid"
   git -C "$CLONE_A" fetch -q origin
-  git -C "$CLONE_A" worktree add -q "$CLONE_A/.worktrees/$sid" -b "ai/$sid" origin/main
+  git -C "$CLONE_A" worktree add -q "$wt" -b "ai/$sid" origin/main
+  mkdir -p "$wt/sessions/work/$sid"
+  printf '{"session_id":"%s","status":"active","scope":["path:tests/%s"]}\n' "$sid" "$sid" > "$wt/sessions/work/$sid/metadata.json"
+  touch "$wt/sessions/work/$sid/worklog.md" "$wt/sessions/work/$sid/commands.md" "$wt/sessions/work/$sid/tests.md" "$wt/sessions/work/$sid/final-summary.md" "$wt/sessions/work/$sid/prompt-log.md"
+  git -C "$wt" add "sessions/work/$sid" && git -C "$wt" commit -q -m "session fixture $sid"
 }
 
 session_worktree() { printf '%s\n' "$CLONE_A/.worktrees/$1"; }
@@ -122,7 +126,7 @@ rebase_session() {
 }
 start_session() {
   project="$1"; topic="$2"
-  (cd "$CLONE_A" && AIMS_HOME="$CLONE_A" "$AIMS" start "$project" "$topic" test-agent)
+  (cd "$CLONE_A" && AIMS_HOME="$CLONE_A" "$AIMS" start "$project" "$topic" test-agent --scope "path:tests/$topic")
 }
 handoff_session() {
   sid="$1"; wt="$(session_worktree "$sid")"
@@ -193,6 +197,7 @@ start_race_ref="$(git --git-dir="$REMOTE" for-each-ref --format='%(refname)' ref
 [ -n "$start_race_ref" ] || fail "start initial race did not create the competing remote ref"
 rm -f "$HOOKS_A/pre-push"
 pass "start initial creation is protected by the zero-OID lease"
+git --git-dir="$REMOTE" update-ref -d "$start_race_ref"
 
 sid="save-initial-race"
 make_session "$sid"
@@ -212,6 +217,7 @@ rm -f "$HOOKS_A/pre-push"
 race_remote_oid="$(git -C "$REMOTE" rev-parse "refs/heads/ai/$sid")"
 [ "$race_remote_oid" = "$main_oid" ] || fail "save initial race overwrote competitor"
 pass "save initial creation is protected by the zero-OID lease"
+git --git-dir="$REMOTE" update-ref -d "refs/heads/ai/$sid"
 
 expect_success "aims start sentinel" start_session lifecycle-project lifecycle-start
 sid="$(session_id_from_output "$LAST_OUTPUT")"
@@ -262,7 +268,7 @@ expect_success "aims handoff pre-fetch setup" handoff_session "$sid"
 handoff_pre_head="$(git -C "$(session_worktree "$sid")" rev-parse HEAD)"
 advance_session_from_writer "$sid" handoff-prefetch-race.txt "competing writer"
 expect_failure "handoff pre-fetch divergence" handoff_session "$sid"
-assert_contains "$LAST_OUTPUT" "is not an ancestor" "handoff pre-fetch divergence guidance"
+assert_contains "$LAST_OUTPUT" "requires an active session owner" "handoff released-session guidance"
 [ "$handoff_pre_head" = "$(git -C "$(session_worktree "$sid")" rev-parse HEAD)" ] || fail "handoff committed before divergence refusal"
 pass "handoff refuses pre-existing remote divergence before checkpointing"
 

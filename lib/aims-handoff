@@ -2,6 +2,9 @@
 set -euo pipefail
 script_dir="$(cd "$(dirname "$0")" && pwd)"
 . "$script_dir/aims-sentinel"
+. "$script_dir/aims-scope-locks"
+. "$script_dir/aims-lifecycle-guard"
+aims_refuse_delegate
 # Run inside a session worktree, or from AIMS_HOME/.worktrees as `aims handoff <session-id>`.
 # Guarantees origin has the COMPLETE session work and marks it as handed off; it never merges to main.
 if [ "${1:-}" = check ]; then
@@ -25,6 +28,9 @@ git remote get-url origin >/dev/null 2>&1 || { echo "ERROR: handoff needs an 'or
 note="${1:-}"                                                                    # optional handoff note (e.g. "waiting on OAuth client id")
 meta="sessions/work/$sid/metadata.json"
 [ -f "$meta" ] || { echo "ERROR: missing $meta — is this a session worktree?" >&2; exit 2; }
+[ "$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1])).get("status", ""))' "$meta")" = active ] || { echo 'REFUSE: handoff requires an active session owner.' >&2; exit 1; }
+git fetch -q origin "$branch" 2>/dev/null || true
+git rev-parse --verify --quiet "refs/remotes/origin/$branch" >/dev/null && aims_assert_scope_unchanged "$(pwd)" "origin/$branch:$meta" "$meta" || true
 "$script_dir/validate-no-secrets.sh"                                               # fail before metadata/worklog mutation or staging
 handoff_base_commit="$(git rev-parse HEAD)"
 remote_ref="refs/remotes/origin/$branch"

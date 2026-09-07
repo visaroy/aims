@@ -10,7 +10,7 @@ AIMS_ROOT="$(cd -P "$(dirname "$SOURCE")/.." && pwd)"
 export AIMS_ROOT
 cmd="${1:-help}"; [ $# -gt 0 ] && shift || true
 case "$cmd" in
-  start|save|handoff|handoff-all|checkpoint|adopt|publish|list|brief|rebase|status|continue|conflicts) exec "$AIMS_ROOT/lib/aims-$cmd" "$@" ;;
+  start|save|handoff|handoff-all|checkpoint|adopt|publish|list|brief|rebase|status|continue|conflicts|abandon) exec "$AIMS_ROOT/lib/aims-$cmd" "$@" ;;
   init)      exec "$AIMS_ROOT/lib/aims-init" "$@" ;;
   artifacts) exec "$AIMS_ROOT/lib/aims-artifacts" "$@" ;;
   wire-agents) exec "$AIMS_ROOT/lib/aims-wire-agents" "$@" ;;
@@ -29,7 +29,7 @@ Git-native session management for AI agents across machines.
 usage: aims <command> [args]
 
   init [dir]            Scaffold a data repo (default: $AIMS_HOME or ~/.aims)
-  start <proj> <topic> [agent] [--scope ...] [--continues-from <id>] [--parent-session <id>]
+  start <proj> <topic> [agent] --scope <csv> [--continues-from <id>] [--parent-session <id>]
                         Start a session (branch + worktree)
   save                  Checkpoint: commit whole worktree + push (run in worktree)
   handoff [note]        Hand session from its worktree (push all + mark)
@@ -41,11 +41,13 @@ usage: aims <command> [args]
   rebase <session-id|ai/session-id>  Rebase a clean session onto origin/main
   adopt <session-id> [--remote]   Take over an active session from origin
   status <session-id>             Resolve active, published, or unknown session state
-  continue <published-id> <topic> [agent] [--scope ...]
+  continue <published-id> <topic> [agent] --scope <csv>
                         Start a new session from current main with recorded lineage
   conflicts --scope <csv> [--session <id>]
                         Explain writable-scope overlaps with active remote sessions
   publish <session-id>  Merge session to main, retain artifacts, delete branch
+  abandon <session-id> --empty-only
+                        Delete only a pristine, unstarted session branch/worktree
   list [--handoff] [--stale] [--closed] [--project <project>]
                         List active remote sessions or published session records
   artifacts <id>        Print/create the session dir in the shared store (AIMS_ARTIFACTS)
@@ -57,7 +59,7 @@ usage: aims <command> [args]
   help | -h | --help             Print this help
 
 Docs: docs/AIMS.md · docs/ARCHITECTURE.md · docs/COMMANDS.md
-Env:  AIMS_HOME (data repo), AIMS_GIT_NAME, AIMS_GIT_EMAIL, AIMS_ARTIFACTS (shared store)
+Env:  AIMS_HOME (data repo), AIMS_SESSION_ID (delegate guard), AIMS_GIT_NAME, AIMS_GIT_EMAIL, AIMS_ARTIFACTS (shared store)
 USAGE
     ;;
   *) echo "aims: unknown command '$cmd' (try 'aims help')" >&2; exit 2 ;;

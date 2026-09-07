@@ -1,10 +1,10 @@
 # AIMS CLI compatibility
 
-## `v1.0.0` public contract
+## `v2.0.0` public contract
 
-AIMS `v1.0.0` is the stable `1.0` command-line contract. The supported public command names, documented arguments, environment variables, lifecycle order, and safety guarantees are the ones printed by `aims help` and described in [COMMANDS.md](COMMANDS.md).
+AIMS `v2.0.0` is the stable `2.0` command-line contract. The supported public command names, documented arguments, environment variables, lifecycle order, and safety guarantees are the ones printed by `aims help` and described in [COMMANDS.md](COMMANDS.md). `start` and `continue` require non-empty scopes; admission is atomically serialized and rechecked; active local adoption requires a handoff.
 
-The contract covers these commands: `init`, `start`, `save`, `rebase`, `handoff`, `checkpoint`, `brief`, `adopt`, `publish`, `list`, `artifacts`, `doctor`, `wire-agents`, `install-hooks`, `preflight`, `version`, and `help`.
+The contract covers these commands: `init`, `start`, `save`, `rebase`, `handoff`, `checkpoint`, `brief`, `adopt`, `publish`, `abandon`, `list`, `artifacts`, `doctor`, `wire-agents`, `install-hooks`, `preflight`, `version`, and `help`.
 
 For the commands and options documented in `COMMANDS.md`, AIMS guarantees that:
 
@@ -16,7 +16,7 @@ For the commands and options documented in `COMMANDS.md`, AIMS guarantees that:
 
 ## Compatibility policy
 
-The stable `v1.0.0` release preserves this documented command surface. After `v1.0.0`, an incompatible change to a documented command name, required argument, option, exit-status contract, or lifecycle guarantee requires a major version increment and a migration note in `CHANGELOG.md`.
+The stable `v2.0.0` release preserves this documented command surface. After `v2.0.0`, an incompatible change to a documented command name, required argument, option, exit-status contract, or lifecycle guarantee requires a major version increment and a migration note in `CHANGELOG.md`.
 
 ## Scope
 

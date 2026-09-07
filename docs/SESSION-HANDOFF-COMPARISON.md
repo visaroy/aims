@@ -59,7 +59,7 @@ The command creates `sessions/work/<session-id>/handoff.md` from an English temp
 ### Explicit continuation metadata
 
 ```bash
-aims start <project> <topic> <agent> --continues-from <session-id>
+aims start <project> <topic> <agent> --scope repo:project,path:src --continues-from <session-id>
 ```
 
 This records a relationship between separate sessions. A normal handoff and adoption remain one session branch and do not need a continuation link.

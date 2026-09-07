@@ -1,5 +1,9 @@
 # Changelog
 
+## 2.0.0 — 2026-09-06
+- `aims start` and `aims continue` now require a non-empty valid `--scope`; migration: add an explicit writable scope to every invocation.
+- Session admission is atomically serialized and rechecked against immutable active scopes; local `aims adopt` requires source `aims handoff`, claims active ownership, and `--remote` remains read-only.
+
 ## 1.1.0 — 2026-07-30
 - Published sessions are now first-class discoverable records: `aims status <id>` distinguishes active, published, and unknown IDs; `aims adopt <published-id>` explains the closed state instead of incorrectly claiming an invalid ID.
 - Added `aims continue <published-id> <topic>` to start a linked session from current `origin/main`, and `aims list --closed` to discover published session records without retaining stale work branches.

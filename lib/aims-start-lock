@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+# Serializes session admission; active branch metadata remains the scope source of truth.
+aims_start_lock_ref='refs/heads/aims-start-lock'
+aims_start_lock_acquire() {
+  local repo="$1" sid="$2" base tree lock_oid
+  base="$(git -C "$repo" rev-parse origin/main)"; tree="$(git -C "$repo" rev-parse "$base^{tree}")"
+  lock_oid="$(git -C "$repo" commit-tree "$tree" -p "$base" -m "🔒 admission: $sid")"
+  git -C "$repo" push -q --force-with-lease="$aims_start_lock_ref:$(aims_zero_oid "$repo")" origin "$lock_oid:$aims_start_lock_ref" || return 1
+  printf '%s\n' "$lock_oid"
+}
+aims_start_lock_release() {
+  local repo="$1" lock_oid="$2"
+  git -C "$repo" push -q --force-with-lease="$aims_start_lock_ref:$lock_oid" origin ":$aims_start_lock_ref"
+}

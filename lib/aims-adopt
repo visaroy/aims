@@ -2,6 +2,8 @@
 set -euo pipefail
 if [ -n "${AIMS_ROOT:-}" ]; then AIMS_LIB="$AIMS_ROOT/lib"; else AIMS_LIB="$(cd "$(dirname "$0")" && pwd)"; fi
 . "$AIMS_LIB/aims-sentinel"
+. "$AIMS_LIB/aims-lifecycle-guard"
+aims_refuse_delegate
 arg="${1:-}"                                                                          # aims adopt <session-id|ai/session-id> [--remote]
 [ -n "$arg" ] || { echo "usage: aims adopt <session-id> [--remote]" >&2; exit 2; }
 [ "$#" -eq 1 ] || { [ "$#" -eq 2 ] && [ "$2" = "--remote" ]; } || { echo "usage: aims adopt <session-id> [--remote]" >&2; exit 2; }
@@ -28,8 +30,9 @@ age_min=$(( ( $(date -u +%s) - $(git -C "$repo" log -1 --format=%ct "origin/$bra
 hstatus=$(git -C "$repo" show "origin/$branch:sessions/work/$sid/metadata.json" 2>/dev/null | python3 -c 'import json,sys;print(json.load(sys.stdin).get("status",""))' 2>/dev/null || echo "")
 if [ "$hstatus" = "handoff" ]; then
   echo "OK: session HANDED OFF (status=handoff) — source pushed everything and released it. Safe to adopt." >&2
-elif [ "$age_min" -lt 120 ]; then
-  echo "WARNING: origin/$branch was updated $age_min min ago and status != handoff — another agent may be ACTIVE. Confirm the session is idle (two writers = conflict), or ask the source to run 'aims handoff'." >&2
+elif [ "$remote" = 0 ]; then
+  echo "REFUSE: $sid is not handed off (status=${hstatus:-unknown}); local adoption would create a concurrent writer. Ask the source to run 'aims handoff', or use 'aims adopt $sid --remote' for read-only inspection." >&2
+  exit 1
 fi
 sep(){ printf '%s\n' "======================================================================"; }
 sep; echo "ADOPTION REPORT — $sid"; sep
@@ -127,8 +130,13 @@ current_branch="$(git -C "$wt" branch --show-current)"
 aims_assert_observed_ancestor "$branch" "$remote_oid" "$(git -C "$wt" rev-parse HEAD)" "$wt"
 wl="$wt/sessions/work/$sid/worklog.md"
 adopter="${AIMS_AGENT:-$(whoami)}@$(hostname -s)"
+python3 - "$wt/sessions/work/$sid/metadata.json" <<'PY'
+import json,sys
+path=sys.argv[1]; metadata=json.load(open(path)); metadata['status']='active'; metadata.pop('handoff_at',None); metadata.pop('handoff_from',None)
+with open(path,'w') as handle: json.dump(metadata,handle,indent=2); handle.write('\n')
+PY
 printf '\n- ADOPTED %s by %s — continuing from ARTIFACTS (git+worklog), NOT from the previous agent context.\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$adopter" >> "$wl"
-git -C "$wt" add "sessions/work/$sid/worklog.md" || { echo "ERROR: adopt checkpoint staging failed; worktree retained at $wt." >&2; exit 1; }
+git -C "$wt" add "sessions/work/$sid/metadata.json" "sessions/work/$sid/worklog.md" || { echo "ERROR: adopt checkpoint staging failed; worktree retained at $wt." >&2; exit 1; }
 git -C "$wt" -c user.name="${AIMS_GIT_NAME:-AIMS Agent}" -c user.email="${AIMS_GIT_EMAIL:-aims@localhost}" commit -q -m "🔄 session: adopt $sid by $adopter" || { echo "ERROR: adopt checkpoint commit failed; worktree retained at $wt." >&2; exit 1; }
 if ! git -C "$wt" push -q --force-with-lease="refs/heads/$branch:$remote_oid" origin "$branch"; then
   echo "ERROR: adopt checkpoint push failed; the remote session branch may have advanced. Worktree retained at $wt; inspect the race and run 'aims save'." >&2

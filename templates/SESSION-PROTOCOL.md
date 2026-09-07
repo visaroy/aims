@@ -31,7 +31,7 @@ sessions/work/<session-id>/metadata.json
 
 ```bash
 cd $AIMS_HOME
-aims start <project> <topic> <agent> --scope host:server1,repo:my-repo   # scope opcjonalny ale ZALECANY
+aims start <project> <topic> <agent> --scope host:server1,repo:my-repo   # scope obowiązkowy
 ```
 
 Skrypt:

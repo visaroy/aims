@@ -3,7 +3,7 @@
 **AI Multi-agent Sessions** — git-native session management for AI coding agents,
 across many machines and many agents.
 
-![Version](https://img.shields.io/badge/Version-v1.1.0-blue) ![Last Update](https://img.shields.io/badge/Update-2026--07--30-orange) [![AIMS CI](https://github.com/visaroy/aims/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/visaroy/aims/actions/workflows/ci.yml) ![status](https://img.shields.io/badge/status-stable-blue) ![license](https://img.shields.io/badge/license-MIT-blue) ![shell](https://img.shields.io/badge/shell-bash-121011)
+![Version](https://img.shields.io/badge/Version-v2.0.0-blue) ![Last Update](https://img.shields.io/badge/Update-2026--09--06-orange) [![AIMS CI](https://github.com/visaroy/aims/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/visaroy/aims/actions/workflows/ci.yml) ![status](https://img.shields.io/badge/status-stable-blue) ![license](https://img.shields.io/badge/license-MIT-blue) ![shell](https://img.shields.io/badge/shell-bash-121011)
 
 AIMS turns each unit of AI work into a **git branch in an isolated worktree**. Sessions can be
 **handed off** between machines and **adopted** by any agent — because the source of truth is a
@@ -14,7 +14,7 @@ session"*, *"hand this off to the other machine"* — and it runs AIMS for you.
 
 ## Stable release
 
-`v1.1.0` adds explicit closed-session discovery and safe continuation: published artifacts remain in `main`, `aims status` resolves their state, and `aims continue` starts a linked session from current `main`. See the [CLI compatibility policy](docs/COMPATIBILITY.md) and the [acceptance test](docs/TESTING.md).
+`v2.0.0` requires explicit immutable writable scope, atomically serializes session admission, blocks nested delegates, and requires handoff before local adoption. See the [CLI compatibility policy](docs/COMPATIBILITY.md) and the [acceptance test](docs/TESTING.md).
 
 ## Agent-to-agent handoff
 
@@ -164,7 +164,7 @@ You do **not** memorize `aims start` / `aims save` / etc. Say what you want; the
 > They are documented so agents — and the curious — know exactly what happens.
 
 ```bash
-aims start myproject "fix login bug" claude    # new branch + worktree
+aims start myproject "fix login bug" claude --scope repo:myproject,path:src   # new branch + worktree
 cd ~/.aims/.worktrees/<session-id>             # agent works here
 aims save                                       # checkpoint: commit whole worktree + push
 aims rebase <session-id>                         # safe rebase after a publish merge conflict
@@ -177,7 +177,7 @@ aims publish <session-id>                        # merge to main, register, done
 | Command | Purpose |
 |---|---|
 | `aims init [dir]` | Scaffold a data repo |
-| `aims start <proj> <topic> [agent] [--scope ...] [--continues-from <id>]` | Start a session |
+| `aims start <proj> <topic> [agent] --scope <csv> [--continues-from <id>]` | Start a session with atomic scope leases |
 | `aims save` | Scan tracked/untracked work, then commit the whole worktree + push |
 | `aims rebase <id>` | Rebase a synchronized clean session onto `origin/main`; checkpoint the rewrite safely |
 | `aims handoff [note]` | Secret-scan, checkpoint, and hand the session to another machine/agent |
@@ -223,8 +223,8 @@ See [`docs/COMMANDS.md`](docs/COMMANDS.md), [`docs/ARCHITECTURE.md`](docs/ARCHIT
 - **Force-policy recovery is supported**: save rebased `HEAD` at `refs/aims/recovery/<id>`, reset to
   `refs/aims/rewrite/<id>`, merge `origin/main` without committing, restore the recovery tree, commit,
   then save; delete the recovery ref only after success so actual conflict work is preserved.
-- **No two-writer conflict**: `aims adopt` warns if a branch moved recently; `aims handoff` marks
-  a session released so adoption elsewhere is known-safe.
+- **No two-writer conflict**: admission is serialized and checked twice; `aims adopt` requires a handoff,
+  claims active ownership, and a later adopter is refused until the next handoff.
 - **`main` is protected**: a `pre-push` hook blocks direct pushes; integration only via `aims publish`.
 - **No secrets, no external calls**: the engine talks only to your `origin`. See [`SECURITY.md`](SECURITY.md).
 

@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+aims_refuse_delegate() {
+  [ -z "${AIMS_SESSION_ID:-}" ] && return 0
+  printf 'RESULT=BLOCKED\nREASON=ALREADY_IN_SESSION\nSESSION_ID=%s\n' "$AIMS_SESSION_ID" >&2
+  exit 1
+}
