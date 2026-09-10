@@ -1,0 +1,39 @@
+#!/usr/bin/env bash
+# Shared scope validation.
+aims_scope_csv() {
+  local csv="${1:-}"
+  AIMS_SCOPE_CSV="$csv" python3 - <<'PY'
+import os,sys
+allowed={'host','repo','path','file','service','vm'}
+raw=os.environ['AIMS_SCOPE_CSV']
+parts=raw.split(',')
+if not raw or not parts or any(not part or part.strip()!=part or '\n' in part or '\r' in part for part in parts):
+    raise SystemExit('ERROR: --scope requires one or more comma-separated, non-empty scopes.')
+for part in parts:
+    kind,sep,value=part.partition(':')
+    if not sep or kind not in allowed or not value:
+        raise SystemExit(f'ERROR: invalid scope: {part}')
+print(','.join(sorted(set(parts))))
+PY
+}
+aims_scope_json() {
+  AIMS_SCOPE_CSV="$(aims_scope_csv "$1")" python3 - <<'PY'
+import json,os
+print(json.dumps(os.environ['AIMS_SCOPE_CSV'].split(',')))
+PY
+}
+aims_scope_fingerprint() {
+  META="$1" python3 - <<'PY'
+import json,os
+metadata=json.loads(os.environ['META']); scope=metadata.get('scope',[])
+if not isinstance(scope,list) or any(not isinstance(item,str) for item in scope): raise SystemExit('ERROR: session scope metadata is invalid.')
+print(json.dumps(sorted(scope),separators=(',',':')))
+PY
+}
+aims_assert_scope_unchanged() {
+  local repo="$1" remote_ref="$2" local_meta="$3" remote_meta local_scope remote_scope
+  remote_meta="$(git -C "$repo" show "$remote_ref" 2>/dev/null)" || { echo 'REFUSE: remote session metadata is unavailable.' >&2; exit 1; }
+  local_scope="$(aims_scope_fingerprint "$(python3 -c 'import pathlib,sys; print(pathlib.Path(sys.argv[1]).read_text())' "$local_meta")")" || exit 1
+  remote_scope="$(aims_scope_fingerprint "$remote_meta")" || exit 1
+  [ "$local_scope" = "$remote_scope" ] || { echo 'REFUSE: session scope is immutable after start.' >&2; exit 1; }
+}

@@ -10,6 +10,7 @@ printf '# Test\n' > "$DATA/README.md"; git -C "$DATA" add README.md && git -C "$
 start="$(AIMS_HOME="$DATA" "$ENGINE" start meta source hermes --scope path:docs/source)"
 sid="$(printf '%s\n' "$start" | sed -n 's/^SESSION_ID=//p')"; wt="$(printf '%s\n' "$start" | sed -n 's/^WORKTREE=//p')"
 printf 'published source\n' > "$wt/source.txt"; (cd "$wt" && AIMS_HOME="$DATA" "$ENGINE" save >/dev/null)
+(cd "$wt" && AIMS_HOME="$DATA" "$ENGINE" handoff publish-test >/dev/null)
 AIMS_HOME="$DATA" "$ENGINE" publish "$sid" >/dev/null
 [ ! -d "$DATA/.worktrees/$sid" ] || { echo 'published worktree remains' >&2; exit 1; }
 if git -C "$DATA" show-ref --verify --quiet "refs/heads/ai/$sid"; then echo 'published local branch remains' >&2; exit 1; fi

@@ -29,5 +29,6 @@ aims start ─▶ work + aims save (checkpoint) ─┬─▶ aims handoff ─▶
 | Uncommitted work destroyed on publish | `aims publish` refuses a dirty worktree |
 | Local commits invisible to publish | `aims save` always pushes when ahead; publish refuses unpushed |
 | "Empty" merge looks like success | publish warns + prints the full session diff |
-| Two agents on one branch | adopt warns on recent activity; handoff marks release |
+| Two agents on one branch | local adopt requires `status=handoff`; `--remote` remains read-only |
+| Two writers in one scope | required scope, atomically serialized admission with a second conflict check, immutable active metadata; lineage never exempts a child |
 | Accidental push to main | `pre-push` hook blocks it |

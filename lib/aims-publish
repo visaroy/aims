@@ -6,6 +6,9 @@ repo="${AIMS_HOME:-$HOME/.aims}"
 branch="$arg"; [[ "$branch" == ai/* ]] || branch="ai/$arg"
 sid="${branch#ai/}"
 [[ "$sid" =~ ^[A-Za-z0-9._-]+$ ]] || { echo "ERROR: unsafe session id: $sid" >&2; exit 2; }
+if [ -n "${AIMS_ROOT:-}" ]; then AIMS_LIB="$AIMS_ROOT/lib"; else AIMS_LIB="$(cd "$(dirname "$0")" && pwd)"; fi
+. "$AIMS_LIB/aims-lifecycle-guard"
+aims_refuse_delegate
 git -C "$repo" remote get-url origin >/dev/null 2>&1 || { echo "ERROR: data repo $repo has no 'origin' remote — publish integrates the session through origin/main. Add one:" >&2; echo "  git -C \"$repo\" remote add origin <url> && git -C \"$repo\" push -u origin main" >&2; exit 1; }
 git -C "$repo" config user.name  >/dev/null 2>&1 || export GIT_AUTHOR_NAME="${AIMS_GIT_NAME:-AIMS Agent}"    GIT_COMMITTER_NAME="${AIMS_GIT_NAME:-AIMS Agent}"      # fresh machine may have no git identity (merge + registry commits)
 git -C "$repo" config user.email >/dev/null 2>&1 || export GIT_AUTHOR_EMAIL="${AIMS_GIT_EMAIL:-aims@localhost}" GIT_COMMITTER_EMAIL="${AIMS_GIT_EMAIL:-aims@localhost}"  # fall back only when unset (real identity is kept)
@@ -39,6 +42,11 @@ main_push_fail() {
   exit 1
 }
 git -C "$repo" fetch origin main "$branch"
+main_oid="$(git -C "$repo" rev-parse origin/main)"; branch_oid="$(git -C "$repo" rev-parse "origin/$branch")"
+metadata="$(git -C "$repo" show "origin/$branch:sessions/work/$sid/metadata.json")" || { echo "ERROR: session metadata is unavailable: $sid" >&2; exit 1; }
+[ "$(META="$metadata" python3 -c 'import json,os; print(json.loads(os.environ["META"]).get("status", ""))')" = handoff ] || { echo 'REFUSE: publish requires a completed aims handoff; origin must be the complete source of truth.' >&2; exit 1; }
+leases=("--force-with-lease=refs/heads/main:$main_oid" "--force-with-lease=refs/heads/$branch:$branch_oid")
+deletes=(":refs/heads/$branch")
 rm -rf "$pub"
 git -C "$repo" worktree add "$pub" -b "publish/$sid" origin/main
 pub_base="$(git -C "$pub" rev-parse HEAD)"   # base to detect an "empty" merge
@@ -68,8 +76,7 @@ if [ -f "$pub/sessions/work/$sid/metadata.json" ] && ! grep -q "$sid" "$pub/SESS
   printf '| %s | %s | %s | %s | %s | sessions/work/%s/ | — | done |\n' "$snn" "${started:0:10}" "${started:11:5}" "$proj" "$topic" "$sid" >> "$pub/SESSIONS.md"
   git -C "$pub" add SESSIONS.md && git -C "$pub" commit -m "📝 registry: $snn $sid" -q
 fi
-AIMS_PUBLISH=1 git -C "$pub" push origin HEAD:main || main_push_fail
-git -C "$repo" push origin --delete "$branch" || true
+AIMS_PUBLISH=1 git -C "$pub" push --atomic "${leases[@]}" origin HEAD:refs/heads/main "${deletes[@]}" || main_push_fail
 echo "--- merged to main (full session diff, not just the registry row):"
 git -C "$pub" diff --stat "$pub_base" HEAD 2>/dev/null | tail -25 || true
 git -C "$repo" worktree remove "$pub" --force

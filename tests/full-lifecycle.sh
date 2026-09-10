@@ -37,6 +37,7 @@ WORKTREE_B="$DATA_B/.worktrees/$SESSION_ID"
 grep -Fx "created by Claude Code on machine A" "$WORKTREE_B/demo.txt"
 printf 'continued by Codex on machine B\n' >> "$WORKTREE_B/demo.txt"
 (cd "$WORKTREE_B" && on_b "$ENGINE" save)
+(cd "$WORKTREE_B" && on_b "$ENGINE" handoff lifecycle-complete)
 on_b "$ENGINE" publish "$SESSION_ID"
 EXPECTED="$(printf 'created by Claude Code on machine A\ncontinued by Codex on machine B')"
 ACTUAL="$(git --git-dir="$ORIGIN" show main:demo.txt)"

@@ -2,6 +2,8 @@
 set -euo pipefail
 script_dir="$(cd "$(dirname "$0")" && pwd)"
 . "$script_dir/aims-sentinel"
+. "$script_dir/aims-lifecycle-guard"
+aims_refuse_delegate
 arg="${1:-}"
 [ -n "$arg" ] && [ $# -eq 1 ] || { echo "usage: aims rebase <session-id|ai/session-id>" >&2; exit 2; }
 repo="${AIMS_HOME:-$HOME/.aims}"

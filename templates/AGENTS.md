@@ -6,9 +6,13 @@ intent regardless of wording or language.
 
 ## Intent → command
 
+## Delegated agents
+
+If `AIMS_SESSION_ID` is set, you are a delegate inside that existing session. Do not run `aims start`, `save`, `handoff`, `publish`, `abandon`, or other lifecycle commands. Work only in the parent-provided scope; the orchestrator owns lifecycle, commits, and validation.
+
 | When the user (in any words/language) wants to… | You run |
 |---|---|
-| begin work on a task | `aims start <project> <topic> <you>` and work only in the printed worktree |
+| begin work on a task | collect writable scope, then run `aims start <project> <topic> <you> --scope <csv>` and work only in the printed worktree |
 | checkpoint / "save the session" | `aims save` |
 | switch to another machine / "hand off the session" | `aims handoff [note]` |
 | take over / "continue / adopt session X" | `aims adopt <session-id>`, then continue from ARTIFACTS |

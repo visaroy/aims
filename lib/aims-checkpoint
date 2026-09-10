@@ -3,6 +3,8 @@ set -euo pipefail
 repo="${AIMS_HOME:-$HOME/.aims}"
 sid="${1:-}"
 lib="${AIMS_ROOT:-$(cd "$(dirname "$0")/.." && pwd)}/lib"
+. "$lib/aims-lifecycle-guard"
+aims_refuse_delegate
 if [ "$sid" = --all ]; then
   [ "$#" -eq 1 ] || { echo "usage: aims checkpoint --all" >&2; exit 2; }
   [ -d "$repo/.worktrees" ] || { echo "INFO: no local AIMS worktrees"; exit 0; }

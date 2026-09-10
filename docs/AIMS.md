@@ -32,7 +32,7 @@ dla codex/opencode/gemini, przywiązana do jednej maszyny).
 ## 3. Cykl życia sesji
 
 ```
-                    aims start <projekt> <temat> <agent>
+                    aims start <projekt> <temat> <agent> --scope repo:projekt,path:src
                               │  (tworzy gałąź ai/<sid> + worktree z origin/main)
                               ▼
         ┌──────────────  PRACA w worktree  ──────────────┐
@@ -55,7 +55,7 @@ dla codex/opencode/gemini, przywiązana do jednej maszyny).
 
 | Komenda | Gdzie uruchomić | Co robi |
 |---|---|---|
-| `aims start <projekt> <temat> [agent] [--scope ...]` | `$AIMS_HOME` | Nowa sesja: gałąź `ai/<sid>` + worktree z `origin/main` + szablon `metadata.json` (w tym pusty blok `environment`). |
+| `aims start <projekt> <temat> [agent] --scope <csv>` | `$AIMS_HOME` | Nowa sesja z obowiązkowym, atomowo blokowanym scope: gałąź `ai/<sid>` + worktree z `origin/main` + szablon `metadata.json` (w tym pusty blok `environment`). |
 | `aims save` | w worktree | Checkpoint: `git add -A` (CAŁY worktree sesji — STATE.md, session-*.md, kod, artefakty) + commit + **push gdy ahead of origin**. Po naprawie 2026-07-18 nie gubi już plików projektu. |
 | `aims handoff [notka]` | w worktree | **Przekazanie maszyny** (polecenie USERA). `git add -A` (KOMPLET), commit, push, `status=handoff`. NIE scala do main. |
 | `aims handoff <sid>` | `$AIMS_HOME/.worktrees/` | Przekazanie jednej wskazanej lokalnej sesji bez ręcznego `cd` do jej katalogu. Waliduje, że worktree, branch `ai/<sid>` i metadata są zgodne, następnie wykonuje zwykły handoff. |
@@ -87,8 +87,8 @@ adopcję lokalną vs zdalną (`--remote`) vs doinstalowanie.
 
 ## 6. Guardy i bezpieczeństwo
 
-- **Żywy pisarz** (`aims adopt`): jeśli gałąź ruszana < 120 min, a `status ≠ handoff` → ostrzeżenie
-  (ryzyko dwóch pisarzy). Przy `status=handoff` → wyciszone (źródło jawnie zwolniło).
+- **Żywy pisarz** (`aims adopt`): lokalna adopcja wymaga `status=handoff`; po adopcji AIMS atomowo
+  przywraca `status=active`, więc drugi lokalny adopter jest odrzucony. `--remote` pozostaje tylko do odczytu.
 - **Granica origin** (`aims adopt`): raport mówi wprost, że pokazuje stan WYPCHNIĘTY — niewypchnięta
   praca maszyny źródłowej nie jest widoczna. Dlatego przed przesiadką: `aims handoff` (push kompletu).
 - **Odmowa** (`aims adopt`): sesja scalona/usunięta → nie ma czego adoptować.

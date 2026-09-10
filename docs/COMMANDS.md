@@ -6,11 +6,12 @@ All commands operate on `AIMS_HOME` (default `~/.aims`). Session ids are
 ### `aims init [dir]`
 Scaffold a data repo: `sessions/work/`, `.worktrees/`, `SESSIONS.md`, gitignored `credentials/`.
 
-### `aims start <project> <topic> [agent] [--scope host:x,repo:y,...] [--continues-from <session-id>]`
+### `aims start <project> <topic> [agent] --scope host:x,repo:y,... [--continues-from <session-id>] [--parent-session <session-id>]`
 Creates branch `ai/<id>` + worktree from `origin/main`, seeds `metadata.json` (incl. empty
 `environment` block), verifies the branch is absent, pushes the start commit with a zero-OID lease,
-and seeds the local `refs/aims/published/<id>` sentinel. `--continues-from` records an optional
+atomically serializes admission through a remote lease, rechecks every active scope, and seeds the local `refs/aims/published/<id>` sentinel. `--scope` is required, non-empty, immutable after start, and uses `host:`, `vm:`, `repo:`, `path:`, `file:`, or `service:` values. `--continues-from` records an optional
 validated predecessor session ID; it does not replace normal handoff/adopt of the same session branch.
+`--parent-session` is lineage only; it never permits a second writer. Before creating a session, AIMS rejects any overlapping active writer. A delegate with `AIMS_SESSION_ID` is blocked from lifecycle commands.
 
 ### `aims save`  *(run inside a worktree)*
 Scans tracked and untracked non-ignored files for secret patterns before mutation, then runs
@@ -85,14 +86,19 @@ Fetches an active remote session, prints an **adoption report** (environment, Gi
 ### `aims status <session-id>`
 Resolves a session against the shared source of truth. It reports `ACTIVE` for an existing `origin/ai/<session-id>` branch, `PUBLISHED` when complete artifacts exist in `origin/main`, and `NOT FOUND` only when neither source contains the ID.
 
-### `aims continue <published-session-id> <new-topic> [agent] [--scope <csv>]`
+### `aims continue <published-session-id> <new-topic> [agent] --scope <csv>`
 Creates a new worktree from current `origin/main`, preserves the original project, and records `continues_from` in its metadata. It deliberately does not recreate a closed branch on an obsolete base.
 
-### `aims conflicts --scope <csv>`
+### `aims conflicts --scope <csv> [--session <session-id>]`
 Read-only diagnostic for writable scopes. Exact `repo:`, `file:`, `host:`, and `service:` scopes conflict when equal; `path:` scopes conflict only when equal or one is a parent of the other. A `SAFE` result has no overlapping active remote scope.
+With `--session`, that active context session is excluded from its own diagnostic. Every overlap is a
+`CONFLICT`; parent/child lineage never relaxes this rule.
 
 ### `aims publish <session-id>`
 Merges the branch to `main`, appends a registry row to `SESSIONS.md`, marks the committed metadata `published`, then deletes the remote branch, worktree, and verified merged local branch. Complete committed session artifacts remain in `origin/main`.
+
+### `aims abandon <session-id> --empty-only`
+Deletes only a pristine scaffold session: one initial commit relative to its own parent, no changed files outside its session directory, empty work artifacts, and no dirty, locally-ahead, or remotely-advanced worktree. It atomically deletes its session branch and owned scope leases with exact remote leases. Use it for a session blocked before work begins; never use it to discard real work.
 
 `aims save` also keeps a private `refs/aims/published/<session-id>` publication sentinel. It survives
 tracking-ref pruning, so a previously published but remotely deleted session branch is never recreated
@@ -104,7 +110,7 @@ Prints (and creates) the session's directory in the shared large-file store. Req
 pointers; the store keeps bytes.
 
 ### `aims list [--handoff] [--stale] [--closed] [--project <project>]`
-Lists active `ai/*` branches with project, handoff status, age, scope, and a STALE flag (>48h). `--closed` reads published metadata from `origin/main`; filters are read-only and may be combined.
+Lists active `ai/*` branches with project, handoff status, age, scope, parent lineage, and a STALE flag (>48h). `--closed` reads published metadata from `origin/main`; filters are read-only and may be combined.
 
 ### `aims doctor`
 Checks git/bash/python3, the data repo, registry, and origin remote.
