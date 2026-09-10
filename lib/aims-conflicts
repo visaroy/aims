@@ -24,7 +24,7 @@ while read -r branch; do
   sid="${branch#ai/}"
   meta="$(git -C "$repo" show "origin/$branch:sessions/work/$sid/metadata.json" 2>/dev/null)" || { echo "WARN: active session metadata is unavailable, skipping from conflict check: $sid" >&2; invalid=1; continue; }
   set +e
-  result="$(META="$meta" python3 - "$requested" "$sid" "$context_session" <<'PY'
+  result="$(META="$meta" python3 - "$requested" "$sid" "$context_session" 2>/dev/null <<'PY'
 import json,os,sys
 allowed={'host','repo','path','file','service','vm'}
 requested=set(sys.argv[1].split(',')); sid=sys.argv[2]; context=sys.argv[3]

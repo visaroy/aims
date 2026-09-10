@@ -1,5 +1,8 @@
 # Changelog
 
+## 2.1.2 — 2026-09-10
+- `aims conflicts` no longer prints the raw Python `ERROR: active session metadata has missing or invalid scope.` line for a legacy invalid-scope session alongside its own `WARN:` — that stderr output is now suppressed so only the single, actionable `WARN:` line is shown per offending session. No behavior change from 2.1.1: the session is still excluded from the result and the scope verdict is unaffected.
+
 ## 2.1.1 — 2026-09-10
 - Fixed: `aims conflicts` (and therefore `aims start`, which calls it internally) refused entirely — for every scope, including scopes with no actual overlap — the moment it encountered even one pre-existing branch with invalid or missing scope metadata (for example a legacy session created before `--scope` became mandatory in 2.0.0). It now warns once about that specific branch, excludes it from the current scope's result, and continues checking every other branch normally, so one stale legacy session can no longer block admission fleet-wide. Regression covered by `tests/conflicts-tolerate-invalid-legacy-metadata.sh`.
 
