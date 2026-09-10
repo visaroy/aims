@@ -1,8 +1,8 @@
 # AIMS CLI compatibility
 
-## `v2.1.0` public contract
+## `v2.1.1` public contract
 
-AIMS `v2.1.0` is the stable `2.x` command-line contract. The supported public command names, documented arguments, environment variables, lifecycle order, and safety guarantees are the ones printed by `aims help` and described in [COMMANDS.md](COMMANDS.md). `start` and `continue` require non-empty scopes; admission is atomically serialized (a cross-machine git-ref lease) and additionally protected by a machine-local admission lock; active local adoption requires a handoff. `aims start` stamps OS-observed hostname/ancestor-process/heartbeat facts used only for read-only stale-conflict diagnosis in `aims conflicts`, never to bypass a real conflict.
+AIMS `v2.1.1` is the stable `2.x` command-line contract. The supported public command names, documented arguments, environment variables, lifecycle order, and safety guarantees are the ones printed by `aims help` and described in [COMMANDS.md](COMMANDS.md). `start` and `continue` require non-empty scopes; admission is atomically serialized (a cross-machine git-ref lease) and additionally protected by a machine-local admission lock; active local adoption requires a handoff. `aims start` stamps OS-observed hostname/ancestor-process/heartbeat facts used only for read-only stale-conflict diagnosis in `aims conflicts`, never to bypass a real conflict. `aims conflicts` tolerates a pre-existing session with invalid or missing legacy scope metadata by warning about it and excluding it from the result, instead of failing the whole check.
 
 The contract covers these commands: `init`, `start`, `save`, `rebase`, `handoff`, `checkpoint`, `brief`, `adopt`, `publish`, `abandon`, `heartbeat`, `delegate-exec`, `list`, `artifacts`, `doctor`, `wire-agents`, `install-hooks`, `preflight`, `version`, and `help`.
 
