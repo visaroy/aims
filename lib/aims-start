@@ -74,6 +74,7 @@ JSON
 touch "$wt/sessions/work/$sid/worklog.md" "$wt/sessions/work/$sid/commands.md" "$wt/sessions/work/$sid/tests.md" "$wt/sessions/work/$sid/final-summary.md" "$wt/sessions/work/$sid/prompt-log.md"
 git -C "$wt" add "sessions/work/$sid"
 git -C "$wt" commit -m "🔒 session: start $sid"
+# shellcheck disable=SC2154  # aims_start_lock_ref is defined by the dynamically sourced lib/aims-start-lock
 if ! git -C "$wt" push --atomic --force-with-lease="refs/heads/$branch:$(aims_zero_oid "$wt")" --force-with-lease="$aims_start_lock_ref:$lock_oid" origin "$branch:refs/heads/$branch" ":$aims_start_lock_ref"; then
   git -C "$repo" worktree remove "$wt" --force 2>/dev/null || true
   git -C "$repo" branch -D "$branch" 2>/dev/null || true

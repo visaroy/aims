@@ -29,9 +29,9 @@ ahead=$(git -C "$repo" rev-list --count "origin/$branch" ^origin/main)
 age_min=$(( ( $(date -u +%s) - $(git -C "$repo" log -1 --format=%ct "origin/$branch") ) / 60 ))   # freshness of the branch tip
 hstatus=$(git -C "$repo" show "origin/$branch:sessions/work/$sid/metadata.json" 2>/dev/null | python3 -c 'import json,sys;print(json.load(sys.stdin).get("status",""))' 2>/dev/null || echo "")
 if [ "$hstatus" = "handoff" ]; then
-  echo "OK: session HANDED OFF (status=handoff) — source pushed everything and released it. Safe to adopt." >&2
+  echo "OK: session HANDED OFF (status=handoff) — source pushed everything and released it. Safe to adopt. (branch tip age: ${age_min} min)" >&2
 elif [ "$remote" = 0 ]; then
-  echo "REFUSE: $sid is not handed off (status=${hstatus:-unknown}); local adoption would create a concurrent writer. Ask the source to run 'aims handoff', or use 'aims adopt $sid --remote' for read-only inspection." >&2
+  echo "REFUSE: $sid is not handed off (status=${hstatus:-unknown}, branch tip age: ${age_min} min); local adoption would create a concurrent writer. Ask the source to run 'aims handoff', or use 'aims adopt $sid --remote' for read-only inspection." >&2
   exit 1
 fi
 sep(){ printf '%s\n' "======================================================================"; }
