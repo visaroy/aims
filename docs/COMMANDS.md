@@ -7,11 +7,40 @@ All commands operate on `AIMS_HOME` (default `~/.aims`). Session ids are
 Scaffold a data repo: `sessions/work/`, `.worktrees/`, `SESSIONS.md`, gitignored `credentials/`.
 
 ### `aims start <project> <topic> [agent] --scope host:x,repo:y,... [--continues-from <session-id>] [--parent-session <session-id>]`
-Creates branch `ai/<id>` + worktree from `origin/main`, seeds `metadata.json` (incl. empty
-`environment` block), verifies the branch is absent, pushes the start commit with a zero-OID lease,
-atomically serializes admission through a remote lease, rechecks every active scope, and seeds the local `refs/aims/published/<id>` sentinel. `--scope` is required, non-empty, immutable after start, and uses `host:`, `vm:`, `repo:`, `path:`, `file:`, or `service:` values. `--continues-from` records an optional
-validated predecessor session ID; it does not replace normal handoff/adopt of the same session branch.
-`--parent-session` is lineage only; it never permits a second writer. Before creating a session, AIMS rejects any overlapping active writer. A delegate with `AIMS_SESSION_ID` is blocked from lifecycle commands.
+Creates branch `ai/` followed by the session id, plus a worktree, verifies the branch is absent,
+pushes the start commit with a zero-OID lease, and seeds the local `refs/aims/published/<id>`
+sentinel. Before admission, it also acquires a **machine-local scope lock** (`$AIMS_HOME/.locks/`,
+keyed by a hash of the normalized `--scope`) so two same-machine `aims start` invocations racing on
+an overlapping scope — regardless of which process, orchestrator, or agent launched either one —
+cannot both slip past the conflict check at the same instant; this lock requires no cooperation from
+the caller and is released as soon as admission completes or fails. It also stamps an `observed`
+block into `metadata.json` — hostname, the outermost resolvable ancestor process's PID and start
+time, and an initial heartbeat — using facts the `aims start` binary itself reads from the operating
+system, never values a caller supplies; these are used only for later stale-conflict diagnosis
+(`aims conflicts`), never to bypass a real conflict. `--continues-from` records an optional validated
+predecessor session ID. `--parent-session` is lineage only; it never exempts a child from the
+standard overlapping-scope conflict check.
+
+### `aims heartbeat <session-id>`  *(inside a worktree)*
+Bumps `metadata.json`'s `observed.last_heartbeat` to now and pushes that single-field change,
+without doing a full `aims save` commit-diff. Intended for a long-running task that would otherwise
+show a stale heartbeat, or for an external, opt-in scheduler. `aims save` already bumps this as a
+side effect on every save that has something to commit, so most sessions never need to call this
+directly.
+
+### `aims delegate-exec <parent-session-id> -- <command> [args...]`  *(inside the parent's worktree)*
+The opt-in, ceiling-raising delegation primitive: an orchestrator that wants full correctness for a
+delegated subprocess calls this **instead of** invoking the subagent CLI directly. It resolves the
+parent session's local worktree, durably records the delegation (id, command, dispatch time) in the
+parent's own `metadata.json` and commits/pushes it **before** the child process starts — so even a
+child killed immediately after spawn leaves a git-visible "dispatched, not completed" record — then
+runs the child with `cwd` set to the parent's worktree and `AIMS_SESSION_ID`/`AIMS_DELEGATE_ID`
+exported via its own `exec`, so a delegated child that itself tries `aims start`/`save`/`handoff`/
+`publish`/etc. is refused by the existing lifecycle guard. It also holds the local scope lock across
+the child's execution, belt-and-suspenders. On exit it records `completed`/`failed` plus the exit
+code and commits again. This raises the correctness ceiling for orchestrators that adopt it; it is
+not required for the baseline guarantee, which the local scope lock plus the existing git-ref
+admission lease provide unconditionally to every caller, cooperating or not.
 
 ### `aims save`  *(run inside a worktree)*
 Scans tracked and untracked non-ignored files for secret patterns before mutation, then runs
@@ -90,15 +119,13 @@ Resolves a session against the shared source of truth. It reports `ACTIVE` for a
 Creates a new worktree from current `origin/main`, preserves the original project, and records `continues_from` in its metadata. It deliberately does not recreate a closed branch on an obsolete base.
 
 ### `aims conflicts --scope <csv> [--session <session-id>]`
-Read-only diagnostic for writable scopes. Exact `repo:`, `file:`, `host:`, and `service:` scopes conflict when equal; `path:` scopes conflict only when equal or one is a parent of the other. A `SAFE` result has no overlapping active remote scope.
-With `--session`, that active context session is excluded from its own diagnostic. Every overlap is a
-`CONFLICT`; parent/child lineage never relaxes this rule.
+Read-only diagnostic for writable scopes. Exact `repo:`, `file:`, `host:`, and `service:` scopes conflict when equal; `path:` scopes conflict only when equal or one is a parent of the other. A `SAFE` result has no overlapping active remote scope. When a `CONFLICT` is found, it also checks — using OS/git facts it re-derives itself right now, never values trusted from the conflicting branch's own claims about itself beyond what that branch's own `aims start` stamped at its creation — whether the conflict looks like a same-machine, dead-ancestor, zero-commit-scaffold orphan, and if so prints a diagnosis suggesting `aims abandon <id> --empty-only`. This is diagnosis only: it never auto-resolves a conflict, and never suggests reclaiming a branch that has any commit beyond its initial scaffold.
+
+### `aims abandon <session-id> --empty-only`
+Deletes only a pristine, unstarted scaffold session: one commit beyond where it branched from `main`, no changed files outside its session directory, empty work artifacts, and no dirty, locally-ahead, or remotely-advanced worktree. It atomically deletes its session branch and owned scope leases with exact remote leases. Use it for a session blocked before work begins, including a diagnosed orphan from `aims conflicts`; never use it to discard real work.
 
 ### `aims publish <session-id>`
 Merges the branch to `main`, appends a registry row to `SESSIONS.md`, marks the committed metadata `published`, then deletes the remote branch, worktree, and verified merged local branch. Complete committed session artifacts remain in `origin/main`.
-
-### `aims abandon <session-id> --empty-only`
-Deletes only a pristine scaffold session: one initial commit relative to its own parent, no changed files outside its session directory, empty work artifacts, and no dirty, locally-ahead, or remotely-advanced worktree. It atomically deletes its session branch and owned scope leases with exact remote leases. Use it for a session blocked before work begins; never use it to discard real work.
 
 `aims save` also keeps a private `refs/aims/published/<session-id>` publication sentinel. It survives
 tracking-ref pruning, so a previously published but remotely deleted session branch is never recreated

@@ -6,12 +6,11 @@ repo="${AIMS_HOME:-$HOME/.aims}"; branch="ai/$sid"; wt="$repo/.worktrees/$sid"
 if [ -n "${AIMS_ROOT:-}" ]; then AIMS_LIB="$AIMS_ROOT/lib"; else AIMS_LIB="$(cd "$(dirname "$0")" && pwd)"; fi
 . "$AIMS_LIB/aims-scope-locks"
 . "$AIMS_LIB/aims-lifecycle-guard"
+. "$AIMS_LIB/aims-scaffold-check"
 aims_refuse_delegate
-git -C "$repo" fetch -q origin "refs/heads/$branch:refs/remotes/origin/$branch" || { echo "ERROR: active session not found: $sid" >&2; exit 1; }
-oid="$(git -C "$repo" rev-parse "origin/$branch")"; parent="$(git -C "$repo" rev-parse "origin/$branch^")" || { echo 'REFUSE: session has no scaffold parent.' >&2; exit 1; }
-[ "$(git -C "$repo" rev-list --count "$parent..origin/$branch")" = 1 ] || { echo 'REFUSE: session has additional commits.' >&2; exit 1; }
-paths="$(git -C "$repo" diff --name-only "$parent" "origin/$branch")"; printf '%s\n' "$paths" | grep -Ev "^sessions/work/$sid/(metadata.json|worklog.md|commands.md|tests.md|final-summary.md|prompt-log.md)$" | grep -q . && { echo 'REFUSE: session changed non-scaffold files.' >&2; exit 1; }
-for file in worklog.md commands.md tests.md final-summary.md prompt-log.md; do [ -z "$(git -C "$repo" show "origin/$branch:sessions/work/$sid/$file")" ] || { echo "REFUSE: session has work in $file." >&2; exit 1; }; done
+git -C "$repo" fetch -q origin main "refs/heads/$branch:refs/remotes/origin/$branch" || { echo "ERROR: active session not found: $sid" >&2; exit 1; }
+oid="$(git -C "$repo" rev-parse "origin/$branch")"
+aims_is_pristine_scaffold "$repo" "$branch" "$sid" || { echo 'REFUSE: session is not a pristine, unstarted scaffold.' >&2; exit 1; }
 metadata="$(git -C "$repo" show "origin/$branch:sessions/work/$sid/metadata.json")" || { echo 'REFUSE: session metadata is unavailable.' >&2; exit 1; }
 [ "$(META="$metadata" python3 -c 'import json,os,sys; m=json.loads(os.environ["META"]); print("yes" if m.get("session_id")==sys.argv[1] and m.get("status")=="active" else "no")' "$sid")" = yes ] || { echo 'REFUSE: session metadata is not an active scaffold.' >&2; exit 1; }
 [ -d "$wt" ] || { echo 'REFUSE: abandon requires the local pristine session worktree.' >&2; exit 1; }

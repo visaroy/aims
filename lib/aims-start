@@ -21,6 +21,9 @@ if [ -n "${AIMS_ROOT:-}" ]; then AIMS_LIB="$AIMS_ROOT/lib"; else AIMS_LIB="$(cd 
 . "$AIMS_LIB/aims-scope-locks"
 . "$AIMS_LIB/aims-start-lock"
 . "$AIMS_LIB/aims-lifecycle-guard"
+. "$AIMS_LIB/aims-observed-facts"
+. "$AIMS_LIB/aims-local-lock"
+. "$AIMS_LIB/aims-heartbeat-facts"
 aims_refuse_delegate
 git -C "$repo" config user.name  >/dev/null 2>&1 || export GIT_AUTHOR_NAME="${AIMS_GIT_NAME:-AIMS Agent}"    GIT_COMMITTER_NAME="${AIMS_GIT_NAME:-AIMS Agent}"      # target repo may have no git identity (commit runs in its worktree)
 git -C "$repo" config user.email >/dev/null 2>&1 || export GIT_AUTHOR_EMAIL="${AIMS_GIT_EMAIL:-aims@localhost}" GIT_COMMITTER_EMAIL="${AIMS_GIT_EMAIL:-aims@localhost}"  # fall back only when unset (real identity is kept)
@@ -31,19 +34,28 @@ wt="$repo/.worktrees/$sid"
 scope_csv="$(aims_scope_csv "$scope_csv")" || exit 2
 scope_json="$(aims_scope_json "$scope_csv")"
 git -C "$repo" fetch origin main
-conflicts="$("$AIMS_LIB/aims-conflicts" --scope "$scope_csv")" || exit 1
-printf '%s\n' "$conflicts" | grep -q '^SAFE:' || { printf '%s\n' "$conflicts" >&2; echo 'ERROR: overlapping active session prevents start.' >&2; exit 1; }
+# Phase 1: machine-local admission lock, keyed by the normalized scope. This
+# is the layer that requires zero cooperation from any caller — it fires
+# unconditionally, inside this binary, for every `aims start` invocation on
+# this machine, regardless of which orchestrator (or none) launched it.
+local_lock_dir="$(aims_local_lock_acquire "$repo" "$scope_csv")" || { echo "ERROR: another local aims start is admitting an overlapping scope on this machine; retry shortly." >&2; exit 1; }
+local_lock_held=1
+trap '[ "$local_lock_held" = 1 ] && aims_local_lock_release "$local_lock_dir" 2>/dev/null || true' EXIT
+conflicts="$("$AIMS_LIB/aims-conflicts" --scope "$scope_csv")" || { aims_local_lock_release "$local_lock_dir"; exit 1; }
+printf '%s\n' "$conflicts" | grep -q '^SAFE:' || { aims_local_lock_release "$local_lock_dir"; local_lock_held=0; printf '%s\n' "$conflicts" >&2; echo 'ERROR: overlapping active session prevents start.' >&2; exit 1; }
 [ -z "$parent_session" ] || {
-  git -C "$repo" fetch -q origin "refs/heads/ai/$parent_session:refs/remotes/origin/ai/$parent_session" || { echo "ERROR: parent session is not active: $parent_session" >&2; exit 1; }
-  parent_meta="$(git -C "$repo" show "origin/ai/$parent_session:sessions/work/$parent_session/metadata.json" 2>/dev/null)" || { echo "ERROR: parent session metadata is unavailable: $parent_session" >&2; exit 1; }
-  parent_status="$(printf '%s' "$parent_meta" | python3 -c 'import json,sys; print(json.load(sys.stdin).get("status", ""))')" || { echo "ERROR: parent session metadata is invalid: $parent_session" >&2; exit 1; }
-  [ "$parent_status" = active ] || { echo "ERROR: parent session is not active: $parent_session (status=$parent_status)" >&2; exit 1; }
+  git -C "$repo" fetch -q origin "refs/heads/ai/$parent_session:refs/remotes/origin/ai/$parent_session" || { aims_local_lock_release "$local_lock_dir"; local_lock_held=0; echo "ERROR: parent session is not active: $parent_session" >&2; exit 1; }
+  parent_meta="$(git -C "$repo" show "origin/ai/$parent_session:sessions/work/$parent_session/metadata.json" 2>/dev/null)" || { aims_local_lock_release "$local_lock_dir"; local_lock_held=0; echo "ERROR: parent session metadata is unavailable: $parent_session" >&2; exit 1; }
+  parent_status="$(printf '%s' "$parent_meta" | python3 -c 'import json,sys; print(json.load(sys.stdin).get("status", ""))')" || { aims_local_lock_release "$local_lock_dir"; local_lock_held=0; echo "ERROR: parent session metadata is invalid: $parent_session" >&2; exit 1; }
+  [ "$parent_status" = active ] || { aims_local_lock_release "$local_lock_dir"; local_lock_held=0; echo "ERROR: parent session is not active: $parent_session (status=$parent_status)" >&2; exit 1; }
 }
-lock_oid="$(aims_start_lock_acquire "$repo" "$sid")" || { echo 'ERROR: another session admission is in progress; retry after it completes.' >&2; exit 1; }
+lock_oid="$(aims_start_lock_acquire "$repo" "$sid")" || { aims_local_lock_release "$local_lock_dir"; local_lock_held=0; echo 'ERROR: another session admission is in progress; retry after it completes.' >&2; exit 1; }
 lock_held=1
-trap '[ "$lock_held" = 1 ] && aims_start_lock_release "$repo" "$lock_oid" 2>/dev/null || true' EXIT
+trap '[ "$lock_held" = 1 ] && aims_start_lock_release "$repo" "$lock_oid" 2>/dev/null || true; [ "$local_lock_held" = 1 ] && aims_local_lock_release "$local_lock_dir" 2>/dev/null || true' EXIT
 if ! conflicts="$("$AIMS_LIB/aims-conflicts" --scope "$scope_csv")" || ! printf '%s\n' "$conflicts" | grep -q '^SAFE:'; then
   aims_start_lock_release "$repo" "$lock_oid" || true
+  aims_local_lock_release "$local_lock_dir" || true
+  lock_held=0; local_lock_held=0
   printf '%s\n' "${conflicts:-ERROR: cannot recheck active sessions.}" >&2
   echo 'ERROR: overlapping or unverifiable active session prevents start.' >&2
   exit 1
@@ -51,6 +63,16 @@ fi
 aims_assert_remote_absent "$(git -C "$repo" remote get-url origin)" "$branch"
 git -C "$repo" worktree add "$wt" -b "$branch" origin/main
 mkdir -p "$wt/sessions/work/$sid"
+# Phase 2: stamp OS-observed facts (never caller-asserted) used only for
+# later stale-conflict diagnosis (Phase 4) — hostname, the outermost
+# resolvable ancestor process's PID+start-time (PID alone is unsafe: PIDs
+# recycle), a creation timestamp, and an initial heartbeat that `aims save`/
+# `aims heartbeat` will keep current.
+observed_hostname="$(aims_hostname)"
+ancestor_identity="$(aims_ancestor_identity)"
+ancestor_pid="$(printf '%s\n' "$ancestor_identity" | sed -n '1p')"
+ancestor_pid_started="$(printf '%s\n' "$ancestor_identity" | sed -n '2p')"
+heartbeat_now="$(aims_heartbeat_now)"
 cat > "$wt/sessions/work/$sid/metadata.json" <<JSON
 {
   "session_id": "$sid",
@@ -68,6 +90,12 @@ cat > "$wt/sessions/work/$sid/metadata.json" <<JSON
     "exec_host": "",
     "setup": "",
     "test": ""
+  },
+  "observed": {
+    "hostname": $(python3 -c 'import json,sys; print(json.dumps(sys.argv[1]))' "$observed_hostname"),
+    "ancestor_pid": $(python3 -c 'import json,sys; print(json.dumps(sys.argv[1]))' "$ancestor_pid"),
+    "ancestor_pid_started": $(python3 -c 'import json,sys; print(json.dumps(sys.argv[1]))' "$ancestor_pid_started"),
+    "last_heartbeat": $(python3 -c 'import json,sys; print(json.dumps(sys.argv[1]))' "$heartbeat_now")
   }$( [ -n "$continues_from" ] && printf ',\n  "continues_from": "%s"' "$continues_from" )$( [ -n "$parent_session" ] && printf ',\n  "parent_session": "%s"' "$parent_session" )
 }
 JSON
@@ -79,12 +107,16 @@ if ! git -C "$wt" push --atomic --force-with-lease="refs/heads/$branch:$(aims_ze
   git -C "$repo" worktree remove "$wt" --force 2>/dev/null || true
   git -C "$repo" branch -D "$branch" 2>/dev/null || true
   aims_start_lock_release "$repo" "$lock_oid" 2>/dev/null || true
+  aims_local_lock_release "$local_lock_dir" 2>/dev/null || true
+  lock_held=0; local_lock_held=0
   echo 'ERROR: admission commit failed; another writer may have started first.' >&2
   exit 1
 fi
 git -C "$wt" branch --set-upstream-to="origin/$branch" "$branch"
 lock_held=0
+local_lock_held=0
 trap - EXIT
+aims_local_lock_release "$local_lock_dir"
 aims_sentinel_mark_at "$wt" "$sid" "$(git -C "$wt" rev-parse HEAD)"
 "$AIMS_LIB/aims-list" 2>/dev/null | grep -v "^$sid" | grep -q "STALE\|SCOPE" && echo "INFO: check active sessions above for scope overlap (aims-list)" >&2 || true
 printf 'SESSION_ID=%s\nBRANCH=%s\nWORKTREE=%s\nSCOPE=%s\n' "$sid" "$branch" "$wt" "$scope_json"

@@ -14,7 +14,7 @@ expect_status() {
 version="$(tr -d '\r\n' < "$ROOT/VERSION")"
 for form in help -h --help; do "$AIMS" "$form" | grep -q 'AIMS — AI Multi-agent Sessions'; done
 for form in version -v --version; do [ "$("$AIMS" "$form")" = "$version" ] || { echo "FAIL: $form output does not match VERSION" >&2; exit 1; }; done
-for command in init start save handoff handoff-all checkpoint brief rebase adopt publish abandon list artifacts doctor wire-agents install-hooks preflight version; do
+for command in init start save handoff handoff-all checkpoint brief rebase adopt publish abandon heartbeat delegate-exec list artifacts doctor wire-agents install-hooks preflight version; do
   "$AIMS" help | grep -q "  $command" || { echo "FAIL: help omits public command $command" >&2; exit 1; }
 done
 expect_status 2 'unknown command' "$AIMS" unknown-command
@@ -33,6 +33,11 @@ expect_status 2 'rebase extra argument' "$AIMS" rebase safe-id extra
 expect_status 2 'adopt invalid flag' "$AIMS" adopt safe-id --typo
 expect_status 2 'publish extra argument' "$AIMS" publish safe-id extra
 expect_status 2 'abandon missing guard' "$AIMS" abandon safe-id
+expect_status 2 'heartbeat missing id' "$AIMS" heartbeat
+expect_status 2 'heartbeat extra argument' "$AIMS" heartbeat safe-id extra
+expect_status 2 'delegate-exec missing separator' "$AIMS" delegate-exec safe-id --
+expect_status 2 'delegate-exec missing command' "$AIMS" delegate-exec safe-id --
+expect_status 2 'delegate-exec missing double-dash' "$AIMS" delegate-exec safe-id echo hi
 expect_status 2 'list unknown flag' "$AIMS" list --typo
 expect_status 2 'list missing project value' "$AIMS" list --project
 expect_status 2 'artifacts extra argument' env AIMS_ARTIFACTS="$TMP/artifacts" "$AIMS" artifacts safe-id extra

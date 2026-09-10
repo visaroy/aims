@@ -4,6 +4,7 @@ script_dir="$(cd "$(dirname "$0")" && pwd)"
 . "$script_dir/aims-sentinel"
 . "$script_dir/aims-scope-locks"
 . "$script_dir/aims-lifecycle-guard"
+. "$script_dir/aims-heartbeat-facts"
 aims_refuse_delegate
 [ "$#" -eq 0 ] || { echo "usage: aims save" >&2; exit 2; }
 for state in rebase-merge rebase-apply sequencer MERGE_HEAD CHERRY_PICK_HEAD REVERT_HEAD; do
@@ -21,7 +22,25 @@ meta="sessions/work/$sid/metadata.json"
 [ "$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1])).get("status", ""))' "$meta")" = active ] || { echo 'REFUSE: save requires an active session owner.' >&2; exit 1; }
 git fetch -q origin "$branch" 2>/dev/null || true
 git rev-parse --verify --quiet "refs/remotes/origin/$branch" >/dev/null && aims_assert_scope_unchanged "$(pwd)" "origin/$branch:$meta" "$meta" || true
-"$script_dir/validate-no-secrets.sh"                       # fail before staging or committing tracked/untracked secret patterns
+"$script_dir/validate-no-secrets.sh"                       # fail before staging, committing, OR any metadata mutation
+# Phase 2: side-effect heartbeat bump — `aims save` is the existing cadence
+# most sessions already use, so this keeps `observed.last_heartbeat` current
+# for stale-conflict diagnosis without requiring a separate opt-in call.
+# Runs only after the secret scan passes, and is skipped entirely when there
+# is no other change to commit, so a no-op save leaves metadata byte-for-
+# byte unchanged (tests assert this).
+if [ -n "$(git status --porcelain)" ]; then
+  python3 - "$meta" "$(aims_heartbeat_now)" <<'PY' || true
+import json,sys
+path,now=sys.argv[1],sys.argv[2]
+try:
+    metadata=json.load(open(path))
+except Exception:
+    raise SystemExit(0)
+metadata.setdefault('observed',{})['last_heartbeat']=now
+with open(path,'w') as handle: json.dump(metadata,handle,indent=2); handle.write('\n')
+PY
+fi
 git add -A                                                    # the WHOLE session worktree (state, docs, code, artifacts) — NOT only sessions/work. Staging only sessions/ used to silently drop project docs.
 if ! git diff --cached --quiet; then
   git commit -m "📝 session: update $sid"

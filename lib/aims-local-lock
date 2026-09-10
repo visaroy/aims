@@ -1,0 +1,72 @@
+#!/usr/bin/env bash
+# Machine-local admission lock (Phase 1) — the layer where "AIMS alone needs
+# to know the rule": every `aims start` invocation, on this machine, from any
+# process (an orchestrator's subagent tool, an arbitrary CLI shelling out on
+# its own initiative, or a human typing by hand), takes this lock BEFORE
+# admission for a given scope proceeds, with zero cooperation required from
+# the caller.
+#
+# Implementation choice, stated honestly: this uses a kernel-atomic `mkdir`
+# (exactly one concurrent caller among racers succeeds) plus a PID+start-time
+# liveness check for stale-lock reclamation, rather than `flock(2)`/`flock(1)`.
+# This trade-off is deliberate for portability: AIMS's own CI matrix runs a
+# macOS Bash 3.2 job with no `flock(1)` binary guaranteed and no `coproc`
+# support, so a long-lived lock-holder helper process (the usual portable
+# flock-via-fcntl pattern) is not viable in plain POSIX shell here. The
+# admission race itself is still race-free (mkdir is atomic at the
+# filesystem/kernel level); what is NOT automatic is fd-close-on-crash
+# release — that is provided instead by the same PID+start-time liveness
+# check already needed for Phase 2/4's stale-session diagnosis, so a holder
+# killed by SIGKILL (or any abrupt exit) is promptly and safely reclaimed by
+# the next contender, without ever trusting a value the holder itself wrote.
+#
+# This lock is scoped to the admission critical section only (acquired
+# immediately before the first conflict check, released immediately after
+# the branch/worktree/metadata are committed and pushed) — it is a race-
+# window narrower, not a session-lifetime exclusive hold. The durable,
+# long-lived "this scope is taken" signal remains the git-visible branch
+# state plus the existing cross-machine git-ref admission lease
+# (lib/aims-start-lock); this local lock only prevents two same-machine
+# invocations from both slipping past that check within the same instant.
+aims_local_lock_dir() {
+  local repo="$1" scope_csv="$2" hash
+  hash="$(aims_scope_hash "$scope_csv")" || return 1
+  printf '%s/.locks/%s.lock\n' "$repo" "$hash"
+}
+aims_local_lock_acquire() {
+  # aims_local_lock_acquire <repo> <normalized-scope-csv> [<timeout-seconds>=30]
+  # On success prints the acquired lock directory path and returns 0.
+  # On timeout, prints nothing and returns 1 (caller must not proceed).
+  local repo="$1" scope_csv="$2" timeout="${3:-30}" dir waited=0 max_waits self_pid self_started existing_pid existing_started
+  dir="$(aims_local_lock_dir "$repo" "$scope_csv")" || return 1
+  mkdir -p "$(dirname "$dir")" 2>/dev/null || true
+  self_pid=$$
+  self_started="$(aims_process_started_marker "$self_pid")"
+  max_waits=$((timeout * 5))
+  while true; do
+    if mkdir "$dir" 2>/dev/null; then
+      printf '%s\n' "$self_pid" > "$dir/pid" 2>/dev/null || true
+      printf '%s\n' "$self_started" > "$dir/started" 2>/dev/null || true
+      printf '%s\n' "$dir"
+      return 0
+    fi
+    existing_pid="$(cat "$dir/pid" 2>/dev/null || true)"
+    existing_started="$(cat "$dir/started" 2>/dev/null || true)"
+    if [ -n "$existing_pid" ] && ! aims_process_is_alive "$existing_pid" "$existing_started"; then
+      # Stale lock from a dead local process: reclaim it and retry immediately.
+      # This never touches git state — it only affects this machine's local
+      # admission serialization.
+      rmdir "$dir" 2>/dev/null || true
+      continue
+    fi
+    waited=$((waited + 1))
+    [ "$waited" -lt "$max_waits" ] || return 1
+    sleep 0.2 2>/dev/null || sleep 1
+  done
+}
+aims_local_lock_release() {
+  local dir="$1"
+  [ -n "$dir" ] || return 0
+  rm -f "$dir/pid" "$dir/started" 2>/dev/null || true
+  rmdir "$dir" 2>/dev/null || true
+}

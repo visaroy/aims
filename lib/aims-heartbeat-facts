@@ -1,0 +1,33 @@
+#!/usr/bin/env bash
+# Phase 2: metadata stamps of OS-observed facts, used purely for stale-conflict
+# diagnosis (Phase 4). These facts are stamped once, at `aims start` time, by
+# the aims binary itself reading the OS process table — never asserted by the
+# caller — and are read back later by `aims conflicts`/`aims start` to decide
+# whether a CONFLICT is plausibly a same-machine dead orphan worth surfacing
+# a reclaim suggestion for. They are NEVER used to silently resolve a
+# conflict against a branch that has real commits beyond its initial scaffold.
+aims_ppid_of() {
+  local pid="$1"
+  ps -o ppid= -p "$pid" 2>/dev/null | tr -d ' '
+}
+aims_ancestor_identity() {
+  # Walk the parent-process chain from the current process upward, stopping
+  # at the outermost PID we can still resolve (typically the top-level agent
+  # /shell/orchestrator process, or PID 1 if the chain is fully walkable) or
+  # after a bounded number of hops (guards against cycles/misbehaving `ps`
+  # on unusual platforms). Prints two lines: the ancestor PID, then its
+  # observed start-time marker (both OS facts, not caller input).
+  local pid=$$ parent hops=0 max_hops=32 last_pid=$$
+  while [ "$hops" -lt "$max_hops" ]; do
+    parent="$(aims_ppid_of "$pid")"
+    [ -n "$parent" ] && [ "$parent" != "0" ] || break
+    last_pid="$parent"
+    [ "$parent" != "1" ] || break
+    pid="$parent"
+    hops=$((hops + 1))
+  done
+  printf '%s\n%s\n' "$last_pid" "$(aims_process_started_marker "$last_pid")"
+}
+aims_heartbeat_now() {
+  date -u +%Y-%m-%dT%H:%M:%SZ
+}

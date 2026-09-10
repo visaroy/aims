@@ -10,6 +10,10 @@ intent regardless of wording or language.
 
 If `AIMS_SESSION_ID` is set, you are a delegate inside that existing session. Do not run `aims start`, `save`, `handoff`, `publish`, `abandon`, or other lifecycle commands. Work only in the parent-provided scope; the orchestrator owns lifecycle, commits, and validation.
 
+## Delegating work to a subagent/subprocess
+
+If you spawn a subagent, subprocess, or a separately invoked coding CLI to work on the same task/scope you already own, prefer `aims delegate-exec <your-session-id> -- <command...>` over invoking it directly. It guarantees the delegate inherits your session context (so it cannot accidentally start a competing session for the same scope) and durably records the delegation before the subprocess even starts, so an abruptly killed delegate still leaves a visible record for you to reconcile. If your host environment cannot invoke `aims delegate-exec` directly, AIMS still protects you: a machine-local admission lock and the existing scope-conflict check catch a same-machine competing `aims start` even from a process that never learned it was a delegate.
+
 | When the user (in any words/language) wants to… | You run |
 |---|---|
 | begin work on a task | collect writable scope, then run `aims start <project> <topic> <you> --scope <csv>` and work only in the printed worktree |

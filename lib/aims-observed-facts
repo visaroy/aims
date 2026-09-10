@@ -1,0 +1,47 @@
+#!/usr/bin/env bash
+# OS-observed facts (never caller-asserted): hostname, and PID+start-time
+# identity used both by the Phase 1 local admission lock's stale-lock
+# reclamation and by Phase 2/4's stale-remote-session diagnosis. These are
+# always read from the operating system by the aims binary itself — a caller
+# cannot spoof them by setting an environment variable.
+aims_hostname() {
+  hostname 2>/dev/null || uname -n 2>/dev/null || printf 'unknown-host\n'
+}
+aims_process_started_marker() {
+  # A human-readable, second-resolution process start timestamp for the given
+  # PID, using the `ps -o lstart=` field supported by both GNU (procps,
+  # Linux) and BSD (macOS) ps. Empty output means the PID could not be
+  # resolved right now (already gone, or a platform quirk) — callers must
+  # treat empty as "cannot confirm," never as "confirmed dead" on its own.
+  local pid="$1"
+  [ -n "$pid" ] || return 0
+  ps -o lstart= -p "$pid" 2>/dev/null | sed -E 's/^ +| +$//g'
+}
+aims_process_is_alive() {
+  # aims_process_is_alive <pid> <expected-started-marker>
+  # True only if a process with this PID exists right now AND (when an
+  # expected start marker was recorded) its current start time still matches
+  # it — this guards against PID reuse: a different process that happens to
+  # have been assigned the same PID later is correctly treated as "not the
+  # same process," never as "still alive."
+  local pid="$1" expected="$2" current
+  [ -n "$pid" ] || return 1
+  kill -0 "$pid" 2>/dev/null || return 1
+  [ -n "$expected" ] || return 0
+  current="$(aims_process_started_marker "$pid")"
+  [ -n "$current" ] && [ "$current" = "$expected" ]
+}
+aims_scope_hash() {
+  # Stable digest of a (caller-normalized) scope CSV, used as the local lock
+  # directory/key name. Order-independence is provided upstream by
+  # aims_scope_csv's sort+dedupe; this only needs to be stable and collision-
+  # resistant, not cryptographically secure.
+  local csv="$1"
+  if command -v sha256sum >/dev/null 2>&1; then
+    printf '%s' "$csv" | sha256sum | cut -d' ' -f1
+  elif command -v shasum >/dev/null 2>&1; then
+    printf '%s' "$csv" | shasum -a 256 | cut -d' ' -f1
+  else
+    printf '%s' "$csv" | python3 -c 'import hashlib,sys; print(hashlib.sha256(sys.stdin.buffer.read()).hexdigest())'
+  fi
+}

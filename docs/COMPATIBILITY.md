@@ -1,10 +1,10 @@
 # AIMS CLI compatibility
 
-## `v2.0.0` public contract
+## `v2.1.0` public contract
 
-AIMS `v2.0.0` is the stable `2.0` command-line contract. The supported public command names, documented arguments, environment variables, lifecycle order, and safety guarantees are the ones printed by `aims help` and described in [COMMANDS.md](COMMANDS.md). `start` and `continue` require non-empty scopes; admission is atomically serialized and rechecked; active local adoption requires a handoff.
+AIMS `v2.1.0` is the stable `2.x` command-line contract. The supported public command names, documented arguments, environment variables, lifecycle order, and safety guarantees are the ones printed by `aims help` and described in [COMMANDS.md](COMMANDS.md). `start` and `continue` require non-empty scopes; admission is atomically serialized (a cross-machine git-ref lease) and additionally protected by a machine-local admission lock; active local adoption requires a handoff. `aims start` stamps OS-observed hostname/ancestor-process/heartbeat facts used only for read-only stale-conflict diagnosis in `aims conflicts`, never to bypass a real conflict.
 
-The contract covers these commands: `init`, `start`, `save`, `rebase`, `handoff`, `checkpoint`, `brief`, `adopt`, `publish`, `abandon`, `list`, `artifacts`, `doctor`, `wire-agents`, `install-hooks`, `preflight`, `version`, and `help`.
+The contract covers these commands: `init`, `start`, `save`, `rebase`, `handoff`, `checkpoint`, `brief`, `adopt`, `publish`, `abandon`, `heartbeat`, `delegate-exec`, `list`, `artifacts`, `doctor`, `wire-agents`, `install-hooks`, `preflight`, `version`, and `help`.
 
 For the commands and options documented in `COMMANDS.md`, AIMS guarantees that:
 
@@ -12,11 +12,12 @@ For the commands and options documented in `COMMANDS.md`, AIMS guarantees that:
 - unknown options and surplus positional arguments fail with exit status `2` before command-specific mutation;
 - `start`, `save`, `handoff`, `adopt`, and `publish` retain Git as the portable source of truth;
 - session work remains portable through the configured `origin`, not an agent transcript or a machine-local worktree;
-- safety refusals do not silently discard work or overwrite a concurrent remote writer.
+- safety refusals do not silently discard work or overwrite a concurrent remote writer;
+- diagnostic features (stale-conflict reclaim suggestions) never silently mutate state or override a real conflict.
 
 ## Compatibility policy
 
-The stable `v2.0.0` release preserves this documented command surface. After `v2.0.0`, an incompatible change to a documented command name, required argument, option, exit-status contract, or lifecycle guarantee requires a major version increment and a migration note in `CHANGELOG.md`.
+The stable `v2.0.0` release preserves this documented command surface; `v2.1.0` is additive (new commands and metadata fields, no removed or redefined command, argument, or exit-status contract). After `v2.0.0`, an incompatible change to a documented command name, required argument, option, exit-status contract, or lifecycle guarantee requires a major version increment and a migration note in `CHANGELOG.md`.
 
 ## Scope
 
