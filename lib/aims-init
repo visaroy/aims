@@ -10,6 +10,7 @@ cd "$home"
 git init -q -b main 2>/dev/null || { git init -q && git checkout -q -b main; }
 cat > .gitignore <<'GI'
 .worktrees/
+.locks/
 credentials/
 *.env
 .claude

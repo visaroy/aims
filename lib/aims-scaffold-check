@@ -1,0 +1,22 @@
+#!/usr/bin/env bash
+# Shared read-only precondition: is this remote session branch a pristine,
+# untouched scaffold — exactly one commit beyond where it branched from main
+# (its actual creation point, not merely its immediate parent commit — a
+# branch with several commits always has "1 commit" between its tip and its
+# own immediate parent, so that comparison alone would incorrectly treat any
+# linear branch as pristine), touching only the session's own scaffold
+# files, all of which are still empty? This is a content-based, git-
+# verifiable proof that there is nothing to lose, used by both
+# `aims abandon --empty-only` (the mutating primitive) and Phase 4's reclaim
+# diagnostics (read-only advisory only — never auto-mutates).
+aims_is_pristine_scaffold() {
+  local repo="$1" branch="$2" sid="$3" base paths file
+  base="$(git -C "$repo" merge-base origin/main "origin/$branch" 2>/dev/null)" || return 1
+  [ "$(git -C "$repo" rev-list --count "$base..origin/$branch" 2>/dev/null)" = 1 ] || return 1
+  paths="$(git -C "$repo" diff --name-only "$base" "origin/$branch" 2>/dev/null)"
+  printf '%s\n' "$paths" | grep -Ev "^sessions/work/$sid/(metadata.json|worklog.md|commands.md|tests.md|final-summary.md|prompt-log.md)\$" | grep -q . && return 1
+  for file in worklog.md commands.md tests.md final-summary.md prompt-log.md; do
+    [ -z "$(git -C "$repo" show "origin/$branch:sessions/work/$sid/$file" 2>/dev/null)" ] || return 1
+  done
+  return 0
+}

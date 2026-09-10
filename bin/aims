@@ -10,7 +10,7 @@ AIMS_ROOT="$(cd -P "$(dirname "$SOURCE")/.." && pwd)"
 export AIMS_ROOT
 cmd="${1:-help}"; [ $# -gt 0 ] && shift || true
 case "$cmd" in
-  start|save|handoff|handoff-all|checkpoint|adopt|publish|list|brief|rebase|status|continue|conflicts|abandon) exec "$AIMS_ROOT/lib/aims-$cmd" "$@" ;;
+  start|save|handoff|handoff-all|checkpoint|adopt|publish|list|brief|rebase|status|continue|conflicts|abandon|heartbeat|delegate-exec) exec "$AIMS_ROOT/lib/aims-$cmd" "$@" ;;
   init)      exec "$AIMS_ROOT/lib/aims-init" "$@" ;;
   artifacts) exec "$AIMS_ROOT/lib/aims-artifacts" "$@" ;;
   wire-agents) exec "$AIMS_ROOT/lib/aims-wire-agents" "$@" ;;
@@ -48,6 +48,9 @@ usage: aims <command> [args]
   publish <session-id>  Merge session to main, retain artifacts, delete branch
   abandon <session-id> --empty-only
                         Delete only a pristine, unstarted session branch/worktree
+  heartbeat <session-id>          Bump the observed liveness timestamp (Phase 2 diagnostics)
+  delegate-exec <parent-session-id> -- <command...>
+                        Run a delegated subprocess with guaranteed session context (Phase 3)
   list [--handoff] [--stale] [--closed] [--project <project>]
                         List active remote sessions or published session records
   artifacts <id>        Print/create the session dir in the shared store (AIMS_ARTIFACTS)
@@ -59,7 +62,7 @@ usage: aims <command> [args]
   help | -h | --help             Print this help
 
 Docs: docs/AIMS.md · docs/ARCHITECTURE.md · docs/COMMANDS.md
-Env:  AIMS_HOME (data repo), AIMS_SESSION_ID (delegate guard), AIMS_GIT_NAME, AIMS_GIT_EMAIL, AIMS_ARTIFACTS (shared store)
+Env:  AIMS_HOME (data repo), AIMS_SESSION_ID (delegate guard), AIMS_DELEGATE_ID (delegate-exec), AIMS_GIT_NAME, AIMS_GIT_EMAIL, AIMS_ARTIFACTS (shared store)
 USAGE
     ;;
   *) echo "aims: unknown command '$cmd' (try 'aims help')" >&2; exit 2 ;;

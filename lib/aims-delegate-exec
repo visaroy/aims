@@ -1,0 +1,109 @@
+#!/usr/bin/env bash
+set -euo pipefail
+# Phase 3 (opt-in ceiling-raiser, not the floor guarantee — see Phase 1's
+# local lock for that): a native delegation primitive. An orchestrator that
+# wants FULL correctness calls this INSTEAD OF invoking a subagent CLI
+# directly. It:
+#   1. resolves the parent session's local worktree (must already exist on
+#      this machine — delegation is local-process-tree, not cross-machine);
+#   2. records the delegation as a durable, git-committed fact in the
+#      parent's own metadata.json BEFORE the child process starts, so even a
+#      child killed a millisecond after spawn leaves a git-visible
+#      "dispatched, not completed" record for the parent (or a later
+#      `aims list`/`aims conflicts`) to see and reconcile;
+#   3. sets the child's cwd to the parent's worktree and exports
+#      AIMS_SESSION_ID (the existing lifecycle guard already understands
+#      this) plus AIMS_DELEGATE_ID, via its own exec — this is the same OS
+#      guarantee as any fork/exec setting up a child's environment, not a
+#      convention the orchestrator has to get right itself;
+#   4. holds the Phase 1 local scope lock for the parent's scope across the
+#      child's execution, belt-and-suspenders, so even if the child's own
+#      environment were somehow stripped before it could invoke `aims`, a
+#      competing `aims start` from that child is still caught locally;
+#   5. on the child's exit (success, failure, or signal), updates the
+#      delegation record's status and commits — never silently drops the
+#      record.
+usage() { echo "usage: aims delegate-exec <parent-session-id> -- <command> [args...]" >&2; }
+sid="${1:-}"; shift || true
+[ -n "$sid" ] || { usage; exit 2; }
+[[ "$sid" =~ ^[A-Za-z0-9._-]+$ ]] || { echo "ERROR: unsafe parent session id: $sid" >&2; exit 2; }
+[ "${1:-}" = "--" ] || { usage; exit 2; }
+shift
+[ "$#" -ge 1 ] || { usage; exit 2; }
+repo="${AIMS_HOME:-$HOME/.aims}"; branch="ai/$sid"; wt="$repo/.worktrees/$sid"
+if [ -n "${AIMS_ROOT:-}" ]; then AIMS_LIB="$AIMS_ROOT/lib"; else AIMS_LIB="$(cd "$(dirname "$0")" && pwd)"; fi
+. "$AIMS_LIB/aims-lifecycle-guard"
+. "$AIMS_LIB/aims-observed-facts"
+. "$AIMS_LIB/aims-local-lock"
+. "$AIMS_LIB/aims-heartbeat-facts"
+aims_refuse_delegate
+[ -d "$wt" ] || { echo "ERROR: no local AIMS worktree for parent session $sid — delegate-exec requires the parent's worktree on this machine." >&2; exit 2; }
+[ "$(git -C "$wt" branch --show-current)" = "$branch" ] || { echo "ERROR: worktree branch does not match parent session $sid" >&2; exit 2; }
+meta="$wt/sessions/work/$sid/metadata.json"
+[ -f "$meta" ] || { echo "ERROR: missing session metadata for $sid" >&2; exit 2; }
+[ "$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1])).get("status", ""))' "$meta")" = active ] || { echo "REFUSE: parent session $sid is not active." >&2; exit 1; }
+scope_csv="$(python3 -c 'import json,sys; print(",".join(json.load(open(sys.argv[1])).get("scope", [])))' "$meta")"
+delegate_id="delegate-$(date -u +%Y%m%dT%H%M%SZ)-$$"
+dispatched_at="$(aims_heartbeat_now)"
+command_display="$*"
+record_delegation() {
+  # record_delegation <status> [<exit_code>]
+  local status="$1" exit_code="${2:-}" now
+  now="$(aims_heartbeat_now)"
+  python3 - "$meta" "$delegate_id" "$command_display" "$dispatched_at" "$status" "${exit_code}" "$now" <<'PY'
+import json,sys
+path,delegate_id,command,dispatched_at,status,exit_code,now=sys.argv[1:8]
+metadata=json.load(open(path))
+delegations=metadata.setdefault('delegations',[])
+entry=next((d for d in delegations if d.get('id')==delegate_id),None)
+if entry is None:
+    entry={'id':delegate_id,'command':command,'dispatched_at':dispatched_at}
+    delegations.append(entry)
+entry['status']=status
+if exit_code != '':
+    entry['exit_code']=int(exit_code)
+entry['updated_at']=now
+with open(path,'w') as handle: json.dump(metadata,handle,indent=2); handle.write('\n')
+PY
+}
+commit_and_best_effort_push() {
+  local message="$1"
+  git -C "$wt" add "sessions/work/$sid/metadata.json"
+  git -C "$wt" diff --cached --quiet && return 0
+  git -C "$wt" commit -q -m "$message"
+  git -C "$wt" fetch -q origin "$branch" 2>/dev/null || true
+  local remote_ref="refs/remotes/origin/$branch"
+  if git -C "$wt" rev-parse --verify --quiet "$remote_ref" >/dev/null; then
+    local remote_oid; remote_oid="$(git -C "$wt" rev-parse "$remote_ref")"
+    git -C "$wt" push -q --force-with-lease="refs/heads/$branch:$remote_oid" origin "$branch" 2>/dev/null || echo "WARN: delegation record committed locally but push to origin failed; run 'aims save' in the parent worktree to sync it." >&2
+  else
+    git -C "$wt" push -q -u origin "$branch" 2>/dev/null || echo "WARN: delegation record committed locally but initial push to origin failed; run 'aims save' in the parent worktree to sync it." >&2
+  fi
+}
+# Durability BEFORE the risk window (child process lifetime) opens: this
+# commit lands even if the child is SIGKILLed a millisecond later.
+record_delegation dispatched
+commit_and_best_effort_push "🤖 delegate: dispatch $delegate_id ($sid)"
+local_lock_dir=""
+if [ -n "$scope_csv" ]; then
+  local_lock_dir="$(aims_local_lock_acquire "$repo" "$scope_csv" 5)" || echo "WARN: could not acquire local scope lock for delegate $delegate_id; proceeding without the belt-and-suspenders local lock (the delegation record and AIMS_SESSION_ID export still apply)." >&2
+fi
+release_lock() { [ -z "$local_lock_dir" ] || aims_local_lock_release "$local_lock_dir"; }
+trap release_lock EXIT
+set +e
+(
+  cd "$wt" || exit 127
+  AIMS_SESSION_ID="$sid" AIMS_DELEGATE_ID="$delegate_id" "$@"
+)
+child_status=$?
+set -e
+release_lock
+trap - EXIT
+if [ "$child_status" -eq 0 ]; then
+  record_delegation completed "$child_status"
+else
+  record_delegation failed "$child_status"
+fi
+commit_and_best_effort_push "🤖 delegate: report $delegate_id ($sid) exit=$child_status"
+printf 'DELEGATE_ID=%s\nSTATUS=%s\nEXIT_CODE=%s\n' "$delegate_id" "$([ "$child_status" -eq 0 ] && echo completed || echo failed)" "$child_status"
+exit "$child_status"

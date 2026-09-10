@@ -1,5 +1,13 @@
 # Changelog
 
+## 2.1.0 — 2026-09-10
+- `aims start` now acquires a machine-local, kernel-atomic admission lock (`$AIMS_HOME/.locks/`, keyed by a hash of the normalized `--scope`) before checking for conflicts, so two same-machine invocations racing on an overlapping scope cannot both slip past the check — regardless of which process, orchestrator, or agent launched either one, and with zero cooperation required from the caller. This addresses the case where AIMS cannot rely on any orchestrator (or an arbitrary CLI shelling out on its own initiative) to propagate coordination state.
+- `aims start` stamps an `observed` block into `metadata.json` — hostname, the outermost resolvable ancestor process's PID and start time, and an initial heartbeat — using facts it reads directly from the operating system, never values a caller supplies. `aims save` and the new `aims heartbeat <session-id>` keep `observed.last_heartbeat` current.
+- `aims conflicts` now diagnoses (never auto-resolves) a same-machine, dead-ancestor, zero-commit-scaffold `CONFLICT` as a likely orphan and suggests `aims abandon <id> --empty-only`; it never suggests reclaiming a branch with any commit beyond its initial scaffold.
+- Added the opt-in `aims delegate-exec <parent-session-id> -- <command...>` primitive: durably pre-registers a delegation in the parent's own metadata before the child process starts (surviving an abrupt child kill), runs the child with the parent's worktree as `cwd` and `AIMS_SESSION_ID`/`AIMS_DELEGATE_ID` exported via its own `exec`, holds the local scope lock across the child's execution, and records completion/failure on exit.
+- `aims abandon`'s pristine-scaffold precondition now compares against the branch's actual merge-base with `main` (its creation point) instead of its immediate parent commit, fixing a latent bug where any linear multi-commit branch could be misclassified as a one-commit scaffold.
+- Migration: none required — `--scope` remains mandatory as of 2.0.0; the new local lock directory and `observed` metadata block are created automatically and are backward compatible with existing sessions (which simply lack an `observed` block until their next `aims save`).
+
 ## 2.0.0 — 2026-09-06
 - `aims start` and `aims continue` now require a non-empty valid `--scope`; migration: add an explicit writable scope to every invocation.
 - Session admission is atomically serialized and rechecked against immutable active scopes; local `aims adopt` requires source `aims handoff`, claims active ownership, and `--remote` remains read-only.

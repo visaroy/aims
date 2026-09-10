@@ -10,9 +10,11 @@ while [ $# -gt 0 ]; do
 done
 [ -n "$requested" ] || { echo "usage: aims conflicts --scope <csv> [--session <session-id>]" >&2; exit 2; }
 [ -z "$context_session" ] || [[ "$context_session" =~ ^[A-Za-z0-9._-]+$ ]] || { echo "ERROR: unsafe context session id: $context_session" >&2; exit 2; }
-repo="${AIMS_HOME:-$HOME/.aims}"; git -C "$repo" fetch -q origin '+refs/heads/ai/*:refs/remotes/origin/ai/*' --prune || { echo 'ERROR: cannot refresh active sessions; refusing conflict check.' >&2; exit 1; }
+repo="${AIMS_HOME:-$HOME/.aims}"; git -C "$repo" fetch -q origin main '+refs/heads/ai/*:refs/remotes/origin/ai/*' --prune || { echo 'ERROR: cannot refresh active sessions; refusing conflict check.' >&2; exit 1; }
 if [ -n "${AIMS_ROOT:-}" ]; then AIMS_LIB="$AIMS_ROOT/lib"; else AIMS_LIB="$(cd "$(dirname "$0")" && pwd)"; fi
 . "$AIMS_LIB/aims-scope-locks"
+. "$AIMS_LIB/aims-observed-facts"
+. "$AIMS_LIB/aims-scaffold-check"
 requested="$(aims_scope_csv "$requested")" || exit 2
 branches="$(git -C "$repo" ls-remote --heads origin 'refs/heads/ai/*')" || { echo 'ERROR: cannot enumerate active sessions; refusing conflict check.' >&2; exit 1; }
 matches=0
@@ -41,7 +43,33 @@ for a in sorted(requested):
         print(f'CONFLICT: {sid} requested={a} active={b}')
 PY
 )"
-  [ -z "$result" ] || { printf '%s\n' "$result"; matches=1; }
+  if [ -n "$result" ]; then
+    printf '%s\n' "$result"
+    matches=1
+    # Phase 4: diagnose-only. Never resolves the conflict; only tells the
+    # caller whether this specific CONFLICT looks like a same-machine,
+    # dead-ancestor, zero-commit orphan safe to consider reclaiming with the
+    # existing `aims abandon --empty-only` primitive. Every check below is
+    # an OS/git-observed fact re-derived right now on THIS machine — never a
+    # value trusted from the conflicting branch's own metadata claims about
+    # itself, beyond the hostname/PID/start-time it recorded at its own
+    # start time (which that branch's own `aims start` binary stamped, not
+    # something any caller asserted).
+    observed="$(META="$meta" python3 -c 'import json,os; print(json.dumps(json.loads(os.environ["META"]).get("observed",{})))' 2>/dev/null || echo '{}')"
+    remote_hostname="$(printf '%s' "$observed" | python3 -c 'import json,sys; print(json.load(sys.stdin).get("hostname",""))' 2>/dev/null || true)"
+    remote_ancestor_pid="$(printf '%s' "$observed" | python3 -c 'import json,sys; print(json.load(sys.stdin).get("ancestor_pid",""))' 2>/dev/null || true)"
+    remote_ancestor_started="$(printf '%s' "$observed" | python3 -c 'import json,sys; print(json.load(sys.stdin).get("ancestor_pid_started",""))' 2>/dev/null || true)"
+    remote_heartbeat="$(printf '%s' "$observed" | python3 -c 'import json,sys; print(json.load(sys.stdin).get("last_heartbeat",""))' 2>/dev/null || true)"
+    local_hostname="$(aims_hostname)"
+    if [ -n "$remote_hostname" ] && [ "$remote_hostname" = "$local_hostname" ] \
+       && [ -n "$remote_ancestor_pid" ] \
+       && ! aims_process_is_alive "$remote_ancestor_pid" "$remote_ancestor_started" \
+       && aims_is_pristine_scaffold "$repo" "$branch" "$sid"; then
+      age_note=""
+      [ -z "$remote_heartbeat" ] || age_note=" (last heartbeat: $remote_heartbeat)"
+      echo "  -> DIAGNOSIS: $sid looks like a same-machine orphan — its recorded ancestor process (pid $remote_ancestor_pid) is no longer running and the branch has zero commits beyond its scaffold$age_note. This is likely safe to reclaim: review it, then run 'aims abandon $sid --empty-only' if you agree nothing would be lost." >&2
+    fi
+  fi
 done < <(printf '%s\n' "$branches" | sed 's#.*refs/heads/##' | sort)
 if [ "$matches" = 0 ]; then echo 'SAFE: no overlapping writable resource.'; fi
 exit 0

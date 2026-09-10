@@ -3,7 +3,7 @@
 **AI Multi-agent Sessions** — git-native session management for AI coding agents,
 across many machines and many agents.
 
-![Version](https://img.shields.io/badge/Version-v2.0.0-blue) ![Last Update](https://img.shields.io/badge/Update-2026--09--06-orange) [![AIMS CI](https://github.com/visaroy/aims/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/visaroy/aims/actions/workflows/ci.yml) ![status](https://img.shields.io/badge/status-stable-blue) ![license](https://img.shields.io/badge/license-MIT-blue) ![shell](https://img.shields.io/badge/shell-bash-121011)
+![Version](https://img.shields.io/badge/Version-v2.1.0-blue) ![Last Update](https://img.shields.io/badge/Update-2026--09--10-orange) [![AIMS CI](https://github.com/visaroy/aims/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/visaroy/aims/actions/workflows/ci.yml) ![status](https://img.shields.io/badge/status-stable-blue) ![license](https://img.shields.io/badge/license-MIT-blue) ![shell](https://img.shields.io/badge/shell-bash-121011)
 
 AIMS turns each unit of AI work into a **git branch in an isolated worktree**. Sessions can be
 **handed off** between machines and **adopted** by any agent — because the source of truth is a
@@ -14,7 +14,7 @@ session"*, *"hand this off to the other machine"* — and it runs AIMS for you.
 
 ## Stable release
 
-`v2.0.0` requires explicit immutable writable scope, atomically serializes session admission, blocks nested delegates, and requires handoff before local adoption. See the [CLI compatibility policy](docs/COMPATIBILITY.md) and the [acceptance test](docs/TESTING.md).
+`v2.1.0` closes the orchestrator/subagent orphaned-session gap without requiring any orchestrator's cooperation: `aims start` now takes a machine-local scope lock and stamps OS-observed hostname/ancestor-process facts, `aims conflicts` diagnoses (never auto-resolves) same-machine dead-ancestor orphans, and an opt-in `aims delegate-exec` primitive gives adopting orchestrators a guaranteed-propagation delegation wrapper. See the [CLI compatibility policy](docs/COMPATIBILITY.md) and the [acceptance test](docs/TESTING.md).
 
 ## Agent-to-agent handoff
 
@@ -177,7 +177,7 @@ aims publish <session-id>                        # merge to main, register, done
 | Command | Purpose |
 |---|---|
 | `aims init [dir]` | Scaffold a data repo |
-| `aims start <proj> <topic> [agent] --scope <csv> [--continues-from <id>]` | Start a session with atomic scope leases |
+| `aims start <proj> <topic> [agent] --scope <csv> [--continues-from <id>]` | Start a session with atomic scope leases plus a machine-local admission lock |
 | `aims save` | Scan tracked/untracked work, then commit the whole worktree + push |
 | `aims rebase <id>` | Rebase a synchronized clean session onto `origin/main`; checkpoint the rewrite safely |
 | `aims handoff [note]` | Secret-scan, checkpoint, and hand the session to another machine/agent |
@@ -188,6 +188,8 @@ aims publish <session-id>                        # merge to main, register, done
 | `aims brief <id>` | Create an optional concise handoff brief |
 | `aims adopt <id> [--remote]` | Take over a session from origin |
 | `aims publish <id>` | Merge to main, append registry, delete branch |
+| `aims heartbeat <id>` | Bump the observed liveness timestamp used for stale-conflict diagnosis |
+| `aims delegate-exec <id> -- <cmd...>` | Run a delegated subprocess with guaranteed session context |
 | `aims list [--handoff] [--stale] [--project <project>]` | List and filter active sessions |
 | `aims artifacts <id>` | Session dir in the shared store (`AIMS_ARTIFACTS`) |
 | `aims wire-agents` | (Re)write the AIMS rules into agent config files |
@@ -224,9 +226,16 @@ See [`docs/COMMANDS.md`](docs/COMMANDS.md), [`docs/ARCHITECTURE.md`](docs/ARCHIT
   `refs/aims/rewrite/<id>`, merge `origin/main` without committing, restore the recovery tree, commit,
   then save; delete the recovery ref only after success so actual conflict work is preserved.
 - **No two-writer conflict**: admission is serialized and checked twice; `aims adopt` requires a handoff,
-  claims active ownership, and a later adopter is refused until the next handoff.
+  claims active ownership, and a later adopter is refused until the next handoff. A machine-local scope
+  lock inside `aims start` additionally serializes same-machine admission races before either writer
+  reaches the git-level check, with zero cooperation required from the calling process.
 - **`main` is protected**: a `pre-push` hook blocks direct pushes; integration only via `aims publish`.
 - **No secrets, no external calls**: the engine talks only to your `origin`. See [`SECURITY.md`](SECURITY.md).
+- **Orphaned-session diagnosis, never silent auto-resolution**: `aims start` stamps OS-observed
+  hostname, ancestor-process identity, and a heartbeat at creation. `aims conflicts` uses these facts
+  only to *suggest* that a same-machine, dead-ancestor, zero-commit-scaffold conflicting branch is
+  safe to reclaim with `aims abandon --empty-only` — it never auto-resolves a conflict, and never
+  suggests reclaiming a branch that has any commit beyond its initial scaffold.
 
 ## Requirements
 

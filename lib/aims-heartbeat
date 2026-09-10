@@ -1,0 +1,43 @@
+#!/usr/bin/env bash
+set -euo pipefail
+# Phase 2: cheap liveness proof for an active session, without a full `aims
+# save` commit-diff. Bumps only the `observed.last_heartbeat` timestamp and
+# pushes that single-field change. Intended for a long-running task that
+# does not otherwise touch files worth committing, or for an external
+# scheduler (opt-in, never installed automatically) to call periodically.
+sid="${1:-}"
+[ -n "$sid" ] && [ "$#" -eq 1 ] || { echo "usage: aims heartbeat <session-id>" >&2; exit 2; }
+[[ "$sid" =~ ^[A-Za-z0-9._-]+$ ]] || { echo "ERROR: unsafe session id: $sid" >&2; exit 2; }
+repo="${AIMS_HOME:-$HOME/.aims}"; branch="ai/$sid"; wt="$repo/.worktrees/$sid"
+if [ -n "${AIMS_ROOT:-}" ]; then AIMS_LIB="$AIMS_ROOT/lib"; else AIMS_LIB="$(cd "$(dirname "$0")" && pwd)"; fi
+. "$AIMS_LIB/aims-heartbeat-facts"
+. "$AIMS_LIB/aims-lifecycle-guard"
+aims_refuse_delegate
+[ -d "$wt" ] || { echo "ERROR: no local AIMS worktree for session $sid" >&2; exit 2; }
+[ "$(git -C "$wt" branch --show-current)" = "$branch" ] || { echo "ERROR: worktree branch does not match session $sid" >&2; exit 2; }
+meta="$wt/sessions/work/$sid/metadata.json"
+[ -f "$meta" ] || { echo "ERROR: missing session metadata for $sid" >&2; exit 2; }
+[ "$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1])).get("status", ""))' "$meta")" = active ] || { echo 'REFUSE: heartbeat requires an active session owner.' >&2; exit 1; }
+now="$(aims_heartbeat_now)"
+python3 - "$meta" "$now" <<'PY'
+import json,sys
+path,now=sys.argv[1],sys.argv[2]
+metadata=json.load(open(path))
+metadata.setdefault('observed',{})['last_heartbeat']=now
+with open(path,'w') as handle: json.dump(metadata,handle,indent=2); handle.write('\n')
+PY
+git -C "$wt" add "sessions/work/$sid/metadata.json"
+if git -C "$wt" diff --cached --quiet; then
+  echo "OK: heartbeat already current for $sid"
+  exit 0
+fi
+git -C "$wt" commit -q -m "💓 session: heartbeat $sid"
+git -C "$wt" fetch -q origin "$branch" 2>/dev/null || true
+remote_ref="refs/remotes/origin/$branch"
+if git -C "$wt" rev-parse --verify --quiet "$remote_ref" >/dev/null; then
+  remote_oid="$(git -C "$wt" rev-parse "$remote_ref")"
+  git -C "$wt" push -q --force-with-lease="refs/heads/$branch:$remote_oid" origin "$branch" || { echo "ERROR: heartbeat push failed; a concurrent writer may have advanced $branch. Run 'aims save' to reconcile." >&2; exit 1; }
+else
+  git -C "$wt" push -q -u origin "$branch" || { echo "ERROR: heartbeat push failed." >&2; exit 1; }
+fi
+echo "OK: heartbeat updated for $sid at $now"
