@@ -18,9 +18,12 @@ if [ -n "${AIMS_ROOT:-}" ]; then AIMS_LIB="$AIMS_ROOT/lib"; else AIMS_LIB="$(cd 
 requested="$(aims_scope_csv "$requested")" || exit 2
 branches="$(git -C "$repo" ls-remote --heads origin 'refs/heads/ai/*')" || { echo 'ERROR: cannot enumerate active sessions; refusing conflict check.' >&2; exit 1; }
 matches=0
+invalid=0
 while read -r branch; do
   [ -n "$branch" ] || continue
-  sid="${branch#ai/}"; meta="$(git -C "$repo" show "origin/$branch:sessions/work/$sid/metadata.json")" || { echo "ERROR: active session metadata is unavailable: $sid" >&2; exit 1; }
+  sid="${branch#ai/}"
+  meta="$(git -C "$repo" show "origin/$branch:sessions/work/$sid/metadata.json" 2>/dev/null)" || { echo "WARN: active session metadata is unavailable, skipping from conflict check: $sid" >&2; invalid=1; continue; }
+  set +e
   result="$(META="$meta" python3 - "$requested" "$sid" "$context_session" <<'PY'
 import json,os,sys
 allowed={'host','repo','path','file','service','vm'}
@@ -43,6 +46,20 @@ for a in sorted(requested):
         print(f'CONFLICT: {sid} requested={a} active={b}')
 PY
 )"
+  python_status=$?
+  set -e
+  if [ "$python_status" -ne 0 ]; then
+    # A pre-existing branch with legacy/invalid scope metadata (e.g. created
+    # before --scope was mandatory) must not block the conflict check for
+    # every OTHER, valid, active session. This branch's own overlap cannot
+    # be evaluated, so it is surfaced once as an actionable warning — never
+    # silently skipped without a trace — and excluded from this scope's
+    # SAFE/CONFLICT verdict; it does not, and never did, prevent a real
+    # conflict check for branches with valid metadata.
+    echo "WARN: $sid has invalid or missing scope metadata (legacy session predating mandatory --scope); it cannot be checked for overlap and is excluded from this result. Review it and either update its metadata.json, publish it, or run 'aims abandon $sid --empty-only' if it is a pristine unstarted scaffold." >&2
+    invalid=1
+    continue
+  fi
   if [ -n "$result" ]; then
     printf '%s\n' "$result"
     matches=1
@@ -71,5 +88,11 @@ PY
     fi
   fi
 done < <(printf '%s\n' "$branches" | sed 's#.*refs/heads/##' | sort)
-if [ "$matches" = 0 ]; then echo 'SAFE: no overlapping writable resource.'; fi
+if [ "$matches" = 0 ]; then
+  if [ "$invalid" = 1 ]; then
+    echo 'SAFE: no overlapping writable resource among sessions with valid scope metadata (see WARN lines above for sessions that could not be checked).'
+  else
+    echo 'SAFE: no overlapping writable resource.'
+  fi
+fi
 exit 0

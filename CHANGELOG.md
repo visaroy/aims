@@ -1,5 +1,8 @@
 # Changelog
 
+## 2.1.1 — 2026-09-10
+- Fixed: `aims conflicts` (and therefore `aims start`, which calls it internally) refused entirely — for every scope, including scopes with no actual overlap — the moment it encountered even one pre-existing branch with invalid or missing scope metadata (for example a legacy session created before `--scope` became mandatory in 2.0.0). It now warns once about that specific branch, excludes it from the current scope's result, and continues checking every other branch normally, so one stale legacy session can no longer block admission fleet-wide. Regression covered by `tests/conflicts-tolerate-invalid-legacy-metadata.sh`.
+
 ## 2.1.0 — 2026-09-10
 - `aims start` now acquires a machine-local, kernel-atomic admission lock (`$AIMS_HOME/.locks/`, keyed by a hash of the normalized `--scope`) before checking for conflicts, so two same-machine invocations racing on an overlapping scope cannot both slip past the check — regardless of which process, orchestrator, or agent launched either one, and with zero cooperation required from the caller. This addresses the case where AIMS cannot rely on any orchestrator (or an arbitrary CLI shelling out on its own initiative) to propagate coordination state.
 - `aims start` stamps an `observed` block into `metadata.json` — hostname, the outermost resolvable ancestor process's PID and start time, and an initial heartbeat — using facts it reads directly from the operating system, never values a caller supplies. `aims save` and the new `aims heartbeat <session-id>` keep `observed.last_heartbeat` current.
