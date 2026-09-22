@@ -12,7 +12,7 @@ If `AIMS_SESSION_ID` is set, you are a delegate inside that existing session. Do
 
 ## Delegating work to a subagent/subprocess
 
-If you spawn a subagent, subprocess, or a separately invoked coding CLI to work on the same task/scope you already own, prefer `aims delegate-exec <your-session-id> -- <command...>` over invoking it directly. It guarantees the delegate inherits your session context (so it cannot accidentally start a competing session for the same scope) and durably records the delegation before the subprocess even starts, so an abruptly killed delegate still leaves a visible record for you to reconcile. If your host environment cannot invoke `aims delegate-exec` directly, AIMS still protects you: a machine-local admission lock and the existing scope-conflict check catch a same-machine competing `aims start` even from a process that never learned it was a delegate.
+If you spawn a subagent, subprocess, or a separately invoked coding CLI to work on the same task/scope you already own, prefer `aims delegate-exec <your-session-id> -- <command...>` over invoking it directly. It guarantees the delegate inherits your session context (so it cannot accidentally start a competing session for the same scope) and durably records the delegation before the subprocess even starts, so an abruptly killed delegate still leaves a visible record for you to reconcile. If your host environment cannot invoke `aims delegate-exec` directly, AIMS still protects you: a machine-local admission lock and the existing scope-conflict check serialize admission, then warn and proceed for a valid overlap; malformed scopes and transport/lease failures remain blocking.
 
 | When the user (in any words/language) wants to… | You run |
 |---|---|
@@ -32,6 +32,9 @@ Examples of intent (all map to the same commands regardless of phrasing or langu
 - Work only inside the session worktree that `aims start`/`aims adopt` prints. Never edit files in the
   data repo root directly for session work.
 - Never `git push` to `main` directly — only `aims publish` integrates a session (a hook enforces this).
+- A valid scope overlap reported by `aims start` or handed-off `aims adopt` is advisory: read the `WARN`
+  and continue. Stop only for malformed scope metadata, origin/Git/lease failures, or a non-handoff
+  local adoption refusal.
 - When adopting a session, continue from **artifacts** (worklog + commits), not from any previous
   agent's context. Read the session's `worklog.md` and its `environment` block first; if a code repo
   or toolchain is missing on this machine, say so before coding.

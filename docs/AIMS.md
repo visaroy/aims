@@ -55,7 +55,7 @@ dla codex/opencode/gemini, przywiązana do jednej maszyny).
 
 | Komenda | Gdzie uruchomić | Co robi |
 |---|---|---|
-| `aims start <projekt> <temat> [agent] --scope <csv>` | `$AIMS_HOME` | Nowa sesja z obowiązkowym, atomowo blokowanym scope: gałąź `ai/<sid>` + worktree z `origin/main` + szablon `metadata.json` (w tym pusty blok `environment`). |
+| `aims start <projekt> <temat> [agent] --scope <csv>` | `$AIMS_HOME` | Nowa sesja z obowiązkowym scope; wykryte prawidłowe overlap-y są ostrzegane, ale nie blokują, natomiast malformed scope i błędy origin/Git/lease nadal blokują. |
 | `aims save` | w worktree | Checkpoint: `git add -A` (CAŁY worktree sesji — STATE.md, session-*.md, kod, artefakty) + commit + **push gdy ahead of origin**. Po naprawie 2026-07-18 nie gubi już plików projektu. |
 | `aims handoff [notka]` | w worktree | **Przekazanie maszyny** (polecenie USERA). `git add -A` (KOMPLET), commit, push, `status=handoff`. NIE scala do main. |
 | `aims handoff <sid>` | `$AIMS_HOME/.worktrees/` | Przekazanie jednej wskazanej lokalnej sesji bez ręcznego `cd` do jej katalogu. Waliduje, że worktree, branch `ai/<sid>` i metadata są zgodne, następnie wykonuje zwykły handoff. |
@@ -87,7 +87,8 @@ adopcję lokalną vs zdalną (`--remote`) vs doinstalowanie.
 
 ## 6. Guardy i bezpieczeństwo
 
-- **Żywy pisarz** (`aims adopt`): lokalna adopcja wymaga `status=handoff`; po adopcji AIMS atomowo
+- **Żywy pisarz** (`aims adopt`): lokalna adopcja wymaga `status=handoff`; prawidłowy overlap jest
+  tylko ostrzeżeniem diagnostycznym; po adopcji AIMS atomowo
   przywraca `status=active`, więc drugi lokalny adopter jest odrzucony. `--remote` pozostaje tylko do odczytu.
 - **Granica origin** (`aims adopt`): raport mówi wprost, że pokazuje stan WYPCHNIĘTY — niewypchnięta
   praca maszyny źródłowej nie jest widoczna. Dlatego przed przesiadką: `aims handoff` (push kompletu).

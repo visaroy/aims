@@ -18,6 +18,14 @@ The test performs this sequence:
 
 Expected duration: under 3 minutes on a typical development machine.
 
+The policy regression suite is separate and verifies the v3.0.0 admission contract: exact `dashboard:`
+matching, advisory exact/path overlaps with successful starts, unrelated `SAFE` diagnostics, malformed
+scope rejection, handed-off adoption diagnostics, and non-handoff adoption rejection.
+
+```bash
+bash tests/advisory-overlap-policy.sh
+```
+
 ## For agents: isolated acceptance test
 
 The agent runs this section, checks every assertion, and reports the exact result. A human does not need to memorize or type the lifecycle commands.

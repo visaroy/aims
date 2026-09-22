@@ -55,8 +55,8 @@ cp -r "$common_home" "$TMP/common-home-2"
 (AIMS_HOME="$common_home" "$ENGINE" start meta lock-race-one tester --scope path:lockrace >"$TMP/lock-race-one.out" 2>&1) & one=$!
 (AIMS_HOME="$TMP/common-home-2" "$ENGINE" start meta lock-race-two tester --scope path:lockrace >"$TMP/lock-race-two.out" 2>&1) & two=$!
 set +e; wait "$one"; one_status=$?; wait "$two"; two_status=$?; set -e
-[ $((one_status + two_status)) -ge 1 ] || { echo 'FAIL: overlapping-scope race did not produce at least one rejection' >&2; exit 1; }
-echo 'PASS: overlapping-scope racers do not both succeed (git-ref lease enforces this end state regardless of local lock timing)'
+[ "$one_status" = 0 ] && [ "$two_status" = 0 ] || { echo 'FAIL: valid overlapping-scope race did not let both starts complete' >&2; exit 1; }
+echo 'PASS: overlapping-scope racers are serialized and both valid starts complete'
 
 # --- Phase 4: conflicts diagnoses a same-machine, dead-ancestor, zero-commit orphan ---
 sleep_pid_holder() {
@@ -143,13 +143,8 @@ echo 'PASS: delegate-exec propagates AIMS_SESSION_ID so a delegated child cannot
 # aims start directly (no delegate-exec, no env var) on an already-active local scope
 # is still caught — by the pre-existing git-level conflict check, which local admission
 # does not bypass or weaken.
-direct_out=""
-set +e
 direct_out="$(AIMS_HOME="$DATA" "$ENGINE" start meta uncooperative-caller tester --scope path:delegateguard 2>&1)"
-direct_status=$?
-set -e
-[ "$direct_status" -ne 0 ] || { echo 'FAIL: an uncooperative caller was able to start a session on an already-active scope' >&2; exit 1; }
-printf '%s\n' "$direct_out" | grep -q 'CONFLICT' || { echo 'FAIL: the rejection did not cite a scope CONFLICT' >&2; exit 1; }
-echo 'PASS: an arbitrary uncooperative caller with no env var and no delegate-exec is still blocked from an overlapping-scope start'
+printf '%s\n' "$direct_out" | grep -q 'WARN: advisory scope overlap' || { echo 'FAIL: the advisory overlap warning was not emitted' >&2; exit 1; }
+echo 'PASS: an arbitrary uncooperative caller with no env var and no delegate-exec may proceed after an advisory overlap warning'
 
 printf 'PASS: local admission lock, observed-fact stamping, heartbeat, reclaim diagnostics, and delegate-exec all behave as designed\n'

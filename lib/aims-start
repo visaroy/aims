@@ -28,6 +28,13 @@ aims_refuse_delegate
 git -C "$repo" config user.name  >/dev/null 2>&1 || export GIT_AUTHOR_NAME="${AIMS_GIT_NAME:-AIMS Agent}"    GIT_COMMITTER_NAME="${AIMS_GIT_NAME:-AIMS Agent}"      # target repo may have no git identity (commit runs in its worktree)
 git -C "$repo" config user.email >/dev/null 2>&1 || export GIT_AUTHOR_EMAIL="${AIMS_GIT_EMAIL:-aims@localhost}" GIT_COMMITTER_EMAIL="${AIMS_GIT_EMAIL:-aims@localhost}"  # fall back only when unset (real identity is kept)
 sanitize() { printf '%s' "$1" | tr '[:upper:]' '[:lower:]' | sed -E 's/[^a-z0-9]+/-/g; s/^-+|-+$//g'; }
+warn_scope_overlap() {
+  local diagnostics="$1" phase="$2"
+  if printf '%s\n' "$diagnostics" | grep -q '^CONFLICT:'; then
+    printf '%s\n' "$diagnostics" >&2
+    echo "WARN: advisory scope overlap detected during $phase; proceeding with user-authorized admission." >&2
+  fi
+}
 sid="$(date -u +%Y%m%dT%H%M%SZ)-$(sanitize "$project")-$(sanitize "$topic")-$(sanitize "$agent")"
 branch="ai/$sid"
 wt="$repo/.worktrees/$sid"
@@ -42,24 +49,42 @@ local_lock_dir="$(aims_local_lock_acquire "$repo" "$scope_csv")" || { echo "ERRO
 local_lock_held=1
 trap '[ "$local_lock_held" = 1 ] && aims_local_lock_release "$local_lock_dir" 2>/dev/null || true' EXIT
 conflicts="$("$AIMS_LIB/aims-conflicts" --scope "$scope_csv")" || { aims_local_lock_release "$local_lock_dir"; exit 1; }
-printf '%s\n' "$conflicts" | grep -q '^SAFE:' || { aims_local_lock_release "$local_lock_dir"; local_lock_held=0; printf '%s\n' "$conflicts" >&2; echo 'ERROR: overlapping active session prevents start.' >&2; exit 1; }
+if ! printf '%s\n' "$conflicts" | grep -q '^SAFE:' && ! printf '%s\n' "$conflicts" | grep -q '^CONFLICT:'; then
+  aims_local_lock_release "$local_lock_dir"; local_lock_held=0; printf '%s\n' "$conflicts" >&2; echo 'ERROR: conflict check returned no usable scope verdict.' >&2; exit 1
+fi
+warn_scope_overlap "$conflicts" 'initial admission check'
 [ -z "$parent_session" ] || {
   git -C "$repo" fetch -q origin "refs/heads/ai/$parent_session:refs/remotes/origin/ai/$parent_session" || { aims_local_lock_release "$local_lock_dir"; local_lock_held=0; echo "ERROR: parent session is not active: $parent_session" >&2; exit 1; }
   parent_meta="$(git -C "$repo" show "origin/ai/$parent_session:sessions/work/$parent_session/metadata.json" 2>/dev/null)" || { aims_local_lock_release "$local_lock_dir"; local_lock_held=0; echo "ERROR: parent session metadata is unavailable: $parent_session" >&2; exit 1; }
   parent_status="$(printf '%s' "$parent_meta" | python3 -c 'import json,sys; print(json.load(sys.stdin).get("status", ""))')" || { aims_local_lock_release "$local_lock_dir"; local_lock_held=0; echo "ERROR: parent session metadata is invalid: $parent_session" >&2; exit 1; }
   [ "$parent_status" = active ] || { aims_local_lock_release "$local_lock_dir"; local_lock_held=0; echo "ERROR: parent session is not active: $parent_session (status=$parent_status)" >&2; exit 1; }
 }
-lock_oid="$(aims_start_lock_acquire "$repo" "$sid")" || { aims_local_lock_release "$local_lock_dir"; local_lock_held=0; echo 'ERROR: another session admission is in progress; retry after it completes.' >&2; exit 1; }
+lock_oid=""
+lock_attempt=0
+while ! lock_oid="$(aims_start_lock_acquire "$repo" "$sid")"; do
+  lock_attempt=$((lock_attempt + 1))
+  [ "$lock_attempt" -lt 10 ] || { aims_local_lock_release "$local_lock_dir"; local_lock_held=0; echo 'ERROR: admission lease unavailable after short retry; origin/lease/git failure remains blocking.' >&2; exit 1; }
+  sleep 0.2
+done
 lock_held=1
 trap '[ "$lock_held" = 1 ] && aims_start_lock_release "$repo" "$lock_oid" 2>/dev/null || true; [ "$local_lock_held" = 1 ] && aims_local_lock_release "$local_lock_dir" 2>/dev/null || true' EXIT
-if ! conflicts="$("$AIMS_LIB/aims-conflicts" --scope "$scope_csv")" || ! printf '%s\n' "$conflicts" | grep -q '^SAFE:'; then
+if ! conflicts="$("$AIMS_LIB/aims-conflicts" --scope "$scope_csv")"; then
   aims_start_lock_release "$repo" "$lock_oid" || true
   aims_local_lock_release "$local_lock_dir" || true
   lock_held=0; local_lock_held=0
   printf '%s\n' "${conflicts:-ERROR: cannot recheck active sessions.}" >&2
-  echo 'ERROR: overlapping or unverifiable active session prevents start.' >&2
+  echo 'ERROR: unverifiable active session prevents start.' >&2
   exit 1
 fi
+if ! printf '%s\n' "$conflicts" | grep -q '^SAFE:' && ! printf '%s\n' "$conflicts" | grep -q '^CONFLICT:'; then
+  aims_start_lock_release "$repo" "$lock_oid" || true
+  aims_local_lock_release "$local_lock_dir" || true
+  lock_held=0; local_lock_held=0
+  printf '%s\n' "$conflicts" >&2
+  echo 'ERROR: conflict recheck returned no usable scope verdict.' >&2
+  exit 1
+fi
+warn_scope_overlap "$conflicts" 'serialized admission recheck'
 aims_assert_remote_absent "$(git -C "$repo" remote get-url origin)" "$branch"
 git -C "$repo" worktree add "$wt" -b "$branch" origin/main
 mkdir -p "$wt/sessions/work/$sid"

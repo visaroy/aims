@@ -108,15 +108,14 @@ Nie blokuje:
 - dirty `$AIMS_HOME`,
 - aktywny branch innego agenta,
 - nieopublikowana sesja innego agenta,
-- ten sam projekt bez overlapping scope.
+- ten sam projekt bez overlapping scope;
+- prawidłowo wykryty overlapping scope — AIMS wypisuje `WARN` i kontynuuje po serializacji admission.
 
-Blokuje tylko realny konflikt pracy:
-- ten sam host,
-- ta sama VM/CT,
-- ten sam repo kodu/IaC,
-- ten sam plik konfiguracyjny,
-- ta sama usługa produkcyjna,
-- ten sam publiczny dokument, który ma być edytowany równocześnie.
+Diagnostyka może wskazać ten sam host, VM/CT, repo kodu/IaC, plik, usługę lub publiczny dokument, ale
+prawidłowo wykryty overlap jest doradczy — nie zatrzymuj się tylko z tego powodu. Blokuje nadal:
+- malformed scope,
+- awaria origin/Git/lease albo nieweryfikowalny recheck,
+- adoption sesji bez `status=handoff` (poza jawnie read-only `--remote`).
 
 ## Lista aktywnych sesji
 

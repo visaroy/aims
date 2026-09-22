@@ -1,8 +1,8 @@
 # AIMS CLI compatibility
 
-## `v2.1.2` public contract
+## `v3.0.0` public contract
 
-AIMS `v2.1.2` is the stable `2.x` command-line contract. The supported public command names, documented arguments, environment variables, lifecycle order, and safety guarantees are the ones printed by `aims help` and described in [COMMANDS.md](COMMANDS.md). `start` and `continue` require non-empty scopes; admission is atomically serialized (a cross-machine git-ref lease) and additionally protected by a machine-local admission lock; active local adoption requires a handoff. `aims start` stamps OS-observed hostname/ancestor-process/heartbeat facts used only for read-only stale-conflict diagnosis in `aims conflicts`, never to bypass a real conflict. `aims conflicts` tolerates a pre-existing session with invalid or missing legacy scope metadata by warning about it and excluding it from the result, instead of failing the whole check.
+AIMS `v3.0.0` is the stable `3.x` command-line contract. The supported public command names, documented arguments, environment variables, lifecycle order, and safety guarantees are the ones printed by `aims help` and described in [COMMANDS.md](COMMANDS.md). `start` and `continue` require non-empty scopes; `dashboard:` is a valid exact-match scope kind; admission remains atomically serialized (a cross-machine git-ref lease) and additionally protected by a machine-local admission lock. Valid detected overlaps now print an advisory warning and proceed, while malformed scopes, origin/Git/lease failures, and unverifiable checks remain blocking. Active local adoption requires a handoff, and handed-off adoption includes advisory overlap diagnostics. `aims start` stamps OS-observed hostname/ancestor-process/heartbeat facts used only for read-only stale-conflict diagnosis in `aims conflicts`. `aims conflicts` tolerates a pre-existing session with invalid or missing legacy scope metadata by warning about it and excluding it from the result, instead of failing the whole check.
 
 The contract covers these commands: `init`, `start`, `save`, `rebase`, `handoff`, `checkpoint`, `brief`, `adopt`, `publish`, `abandon`, `heartbeat`, `delegate-exec`, `list`, `artifacts`, `doctor`, `wire-agents`, `install-hooks`, `preflight`, `version`, and `help`.
 
@@ -17,7 +17,7 @@ For the commands and options documented in `COMMANDS.md`, AIMS guarantees that:
 
 ## Compatibility policy
 
-The stable `v2.0.0` release preserves this documented command surface; `v2.1.0` is additive (new commands and metadata fields, no removed or redefined command, argument, or exit-status contract). After `v2.0.0`, an incompatible change to a documented command name, required argument, option, exit-status contract, or lifecycle guarantee requires a major version increment and a migration note in `CHANGELOG.md`.
+The stable `v2.0.0` through `v2.1.2` releases preserved blocking overlap admission. `v3.0.0` intentionally changes that lifecycle guarantee: valid detected overlaps are advisory and no longer reject `aims start`; handed-off adoption reports them without rejecting the adoption. This is a major-version migration. Command names, required arguments, malformed-scope validation, origin/Git/lease failure handling, and the non-handoff adoption refusal remain unchanged.
 
 ## Scope
 

@@ -3,7 +3,7 @@
 **AI Multi-agent Sessions** — git-native session management for AI coding agents,
 across many machines and many agents.
 
-![Version](https://img.shields.io/badge/Version-v2.1.2-blue) ![Last Update](https://img.shields.io/badge/Update-2026--09--10-orange) [![AIMS CI](https://github.com/visaroy/aims/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/visaroy/aims/actions/workflows/ci.yml) ![status](https://img.shields.io/badge/status-stable-blue) ![license](https://img.shields.io/badge/license-MIT-blue) ![shell](https://img.shields.io/badge/shell-bash-121011)
+![Version](https://img.shields.io/badge/Version-v3.0.0-blue) ![Last Update](https://img.shields.io/badge/Update-2026--09--22-orange) [![AIMS CI](https://github.com/visaroy/aims/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/visaroy/aims/actions/workflows/ci.yml) ![status](https://img.shields.io/badge/status-stable-blue) ![license](https://img.shields.io/badge/license-MIT-blue) ![shell](https://img.shields.io/badge/shell-bash-121011)
 
 AIMS turns each unit of AI work into a **git branch in an isolated worktree**. Sessions can be
 **handed off** between machines and **adopted** by any agent — because the source of truth is a
@@ -14,7 +14,7 @@ session"*, *"hand this off to the other machine"* — and it runs AIMS for you.
 
 ## Stable release
 
-`v2.1.2` closes the orchestrator/subagent orphaned-session gap without requiring any orchestrator's cooperation: `aims start` now takes a machine-local scope lock and stamps OS-observed hostname/ancestor-process facts, `aims conflicts` diagnoses (never auto-resolves) same-machine dead-ancestor orphans while tolerating pre-existing sessions with invalid legacy metadata, and an opt-in `aims delegate-exec` primitive gives adopting orchestrators a guaranteed-propagation delegation wrapper. See the [CLI compatibility policy](docs/COMPATIBILITY.md) and the [acceptance test](docs/TESTING.md).
+`v3.0.0` makes detected valid scope overlaps advisory: `aims start` warns and proceeds after its serialized admission checks, while malformed scopes and Git/origin/lease failures remain blocking. `dashboard:` is a new exact-match scope kind, and handed-off `aims adopt` reports overlap diagnostics without treating them as a blocker; local adoption still requires `status=handoff`. See the [CLI compatibility policy](docs/COMPATIBILITY.md) and the [acceptance test](docs/TESTING.md).
 
 ## Agent-to-agent handoff
 
@@ -225,10 +225,11 @@ See [`docs/COMMANDS.md`](docs/COMMANDS.md), [`docs/ARCHITECTURE.md`](docs/ARCHIT
 - **Force-policy recovery is supported**: save rebased `HEAD` at `refs/aims/recovery/<id>`, reset to
   `refs/aims/rewrite/<id>`, merge `origin/main` without committing, restore the recovery tree, commit,
   then save; delete the recovery ref only after success so actual conflict work is preserved.
-- **No two-writer conflict**: admission is serialized and checked twice; `aims adopt` requires a handoff,
-  claims active ownership, and a later adopter is refused until the next handoff. A machine-local scope
-  lock inside `aims start` additionally serializes same-machine admission races before either writer
-  reaches the git-level check, with zero cooperation required from the calling process.
+- **No silent admission race**: admission is serialized and checked twice; a detected valid scope overlap
+  is explicitly warned about and allowed, while malformed scopes and Git/origin/lease failures remain
+  blocking. `aims adopt` requires a handoff, claims active ownership, and a later adopter is refused
+  until the next handoff. A machine-local scope lock inside `aims start` additionally serializes
+  same-machine admission races before either writer reaches the git-level check.
 - **`main` is protected**: a `pre-push` hook blocks direct pushes; integration only via `aims publish`.
 - **No secrets, no external calls**: the engine talks only to your `origin`. See [`SECURITY.md`](SECURITY.md).
 - **Orphaned-session diagnosis, never silent auto-resolution**: `aims start` stamps OS-observed
