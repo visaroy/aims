@@ -4,7 +4,7 @@ aims_scope_csv() {
   local csv="${1:-}"
   AIMS_SCOPE_CSV="$csv" python3 - <<'PY'
 import os,sys
-allowed={'host','repo','path','file','service','vm'}
+allowed={'host','repo','path','file','service','vm','dashboard'}
 raw=os.environ['AIMS_SCOPE_CSV']
 parts=raw.split(',')
 if not raw or not parts or any(not part or part.strip()!=part or '\n' in part or '\r' in part for part in parts):

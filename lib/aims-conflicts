@@ -26,7 +26,7 @@ while read -r branch; do
   set +e
   result="$(META="$meta" python3 - "$requested" "$sid" "$context_session" 2>/dev/null <<'PY'
 import json,os,sys
-allowed={'host','repo','path','file','service','vm'}
+allowed={'host','repo','path','file','service','vm','dashboard'}
 requested=set(sys.argv[1].split(',')); sid=sys.argv[2]; context=sys.argv[3]
 try: metadata=json.loads(os.environ['META']); active=set(metadata['scope'])
 except Exception as exc: raise SystemExit(f'ERROR: invalid active session metadata: {exc}')
@@ -38,7 +38,7 @@ def overlaps(a,b):
     ta,va=a.split(':',1); tb,vb=b.split(':',1)
     if ta!=tb: return False
     if ta=='path': return va.startswith(vb.rstrip('/')+'/') or vb.startswith(va.rstrip('/')+'/')
-    return ta in {'repo','file','host','service','vm'} and va==vb
+    return ta in {'repo','file','host','service','vm','dashboard'} and va==vb
 if sid == context: raise SystemExit
 for a in sorted(requested):
     for b in sorted(active):

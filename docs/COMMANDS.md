@@ -9,7 +9,9 @@ Scaffold a data repo: `sessions/work/`, `.worktrees/`, `SESSIONS.md`, gitignored
 ### `aims start <project> <topic> [agent] --scope host:x,repo:y,... [--continues-from <session-id>] [--parent-session <session-id>]`
 Creates branch `ai/` followed by the session id, plus a worktree, verifies the branch is absent,
 pushes the start commit with a zero-OID lease, and seeds the local `refs/aims/published/<id>`
-sentinel. Before admission, it also acquires a **machine-local scope lock** (`$AIMS_HOME/.locks/`,
+sentinel. A valid detected scope overlap is advisory: `aims start` prints the `CONFLICT` diagnostics
+and a `WARN`, then continues. Malformed requested scopes, unverifiable conflict checks, origin errors,
+Git errors, and lease failures remain blocking. Before admission, it also acquires a **machine-local scope lock** (`$AIMS_HOME/.locks/`,
 keyed by a hash of the normalized `--scope`) so two same-machine `aims start` invocations racing on
 an overlapping scope — regardless of which process, orchestrator, or agent launched either one —
 cannot both slip past the conflict check at the same instant; this lock requires no cooperation from
@@ -110,7 +112,13 @@ Commits and pushes one selected local session, or every valid local session with
 Creates an optional English `sessions/work/<session-id>/handoff.md` from the built-in template. It never overwrites an existing brief and does not replace the chronological `worklog.md`.
 
 ### `aims adopt <session-id> [--remote]`
-Fetches an active remote session, prints an **adoption report** (environment, Git-native handoff delta, host probe, and recommendation), creates a worktree from the existing branch, logs the takeover, and seeds the local publication sentinel. `--remote` = report only. A published session is not an error: adopt reports that its branch was intentionally removed and points to `aims continue`.
+Fetches an active remote session, prints an **adoption report** (environment, Git-native handoff delta,
+advisory scope-overlap diagnostics, host probe, and recommendation), creates a worktree from the existing
+branch, logs the takeover, and seeds the local publication sentinel. A valid overlap in the advisory
+diagnostics does not block a handed-off adoption. Local adoption still requires `status=handoff`;
+non-handoff status, malformed target scope metadata, origin errors, Git errors, and lease failures remain
+blocking. `--remote` = report only. A published session is not an error: adopt reports that its branch was
+intentionally removed and points to `aims continue`.
 
 ### `aims status <session-id>`
 Resolves a session against the shared source of truth. It reports `ACTIVE` for an existing `origin/ai/<session-id>` branch, `PUBLISHED` when complete artifacts exist in `origin/main`, and `NOT FOUND` only when neither source contains the ID.
@@ -119,7 +127,17 @@ Resolves a session against the shared source of truth. It reports `ACTIVE` for a
 Creates a new worktree from current `origin/main`, preserves the original project, and records `continues_from` in its metadata. It deliberately does not recreate a closed branch on an obsolete base.
 
 ### `aims conflicts --scope <csv> [--session <session-id>]`
-Read-only diagnostic for writable scopes. Exact `repo:`, `file:`, `host:`, and `service:` scopes conflict when equal; `path:` scopes conflict only when equal or one is a parent of the other. A `SAFE` result has no overlapping active remote scope. A pre-existing branch with invalid or missing scope metadata (for example a legacy session created before `--scope` was mandatory) prints one `WARN` line naming it and is excluded from that scope's result — it never turns the whole check into a hard failure for every other, valid session. When a `CONFLICT` is found, it also checks — using OS/git facts it re-derives itself right now, never values trusted from the conflicting branch's own claims about itself beyond what that branch's own `aims start` stamped at its creation — whether the conflict looks like a same-machine, dead-ancestor, zero-commit-scaffold orphan, and if so prints a diagnosis suggesting `aims abandon <id> --empty-only`. This is diagnosis only: it never auto-resolves a conflict, and never suggests reclaiming a branch that has any commit beyond its initial scaffold.
+Read-only diagnostic for writable scopes. Exact `repo:`, `file:`, `host:`, `service:`, and `dashboard:`
+scopes conflict when equal; `path:` scopes conflict only when equal or one is a parent of the other.
+A `SAFE` result has no overlapping active remote scope. A pre-existing branch with invalid or missing
+scope metadata (for example a legacy session created before `--scope` was mandatory) prints one `WARN`
+line naming it and is excluded from that scope's result — it never turns the whole check into a hard failure
+for every other, valid session. When a `CONFLICT` is found, it also checks — using OS/git facts it re-derives
+itself right now, never values trusted from the conflicting branch's own claims about itself beyond what
+that branch's own `aims start` stamped at its creation — whether the conflict looks like a same-machine,
+dead-ancestor, zero-commit-scaffold orphan, and if so prints a diagnosis suggesting `aims abandon <id>
+--empty-only`. This is diagnosis only: it never auto-resolves a conflict, and never suggests reclaiming a
+branch that has any commit beyond its initial scaffold.
 
 ### `aims abandon <session-id> --empty-only`
 Deletes only a pristine, unstarted scaffold session: one commit beyond where it branched from `main`, no changed files outside its session directory, empty work artifacts, and no dirty, locally-ahead, or remotely-advanced worktree. It atomically deletes its session branch and owned scope leases with exact remote leases. Use it for a session blocked before work begins, including a diagnosed orphan from `aims conflicts`; never use it to discard real work.

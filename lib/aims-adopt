@@ -3,6 +3,7 @@ set -euo pipefail
 if [ -n "${AIMS_ROOT:-}" ]; then AIMS_LIB="$AIMS_ROOT/lib"; else AIMS_LIB="$(cd "$(dirname "$0")" && pwd)"; fi
 . "$AIMS_LIB/aims-sentinel"
 . "$AIMS_LIB/aims-lifecycle-guard"
+. "$AIMS_LIB/aims-scope-locks"
 aims_refuse_delegate
 arg="${1:-}"                                                                          # aims adopt <session-id|ai/session-id> [--remote]
 [ -n "$arg" ] || { echo "usage: aims adopt <session-id> [--remote]" >&2; exit 2; }
@@ -87,6 +88,22 @@ if [ -n "$boundary" ] && git -C "$repo" cat-file -e "$boundary^{commit}" 2>/dev/
 else
   echo "  detailed delta unavailable: this session predates handoff boundaries."
 fi
+scope_csv="$(python3 - /tmp/aims-adopt-meta.$$.json <<'PY'
+import json,sys
+metadata=json.load(open(sys.argv[1]))
+scope=metadata.get('scope')
+if not isinstance(scope,list) or not scope or any(not isinstance(item,str) for item in scope):
+    raise SystemExit('invalid or missing scope metadata')
+print(','.join(scope))
+PY
+)" || { rm -f /tmp/aims-adopt-meta.$$.json; echo "ERROR: handed-off session $sid has invalid or missing scope metadata; refusing adoption." >&2; exit 1; }
+scope_csv="$(aims_scope_csv "$scope_csv")" || { rm -f /tmp/aims-adopt-meta.$$.json; echo "ERROR: handed-off session $sid has invalid scope metadata; refusing adoption." >&2; exit 1; }
+echo "  --- ADVISORY SCOPE DIAGNOSTICS ---"
+scope_diagnostics="$("$AIMS_LIB/aims-conflicts" --scope "$scope_csv" --session "$sid")" || { rm -f /tmp/aims-adopt-meta.$$.json; echo 'ERROR: cannot evaluate handoff scope overlaps; refusing adoption.' >&2; exit 1; }
+if printf '%s\n' "$scope_diagnostics" | grep -q '^CONFLICT:'; then
+  echo 'WARN: advisory scope overlap detected for handed-off session; adoption remains allowed.' >&2
+fi
+printf '%s\n' "$scope_diagnostics"
 rm -f /tmp/aims-adopt-meta.$$.json
 echo "  --- PROBE THIS HOST ($(hostname -s)) ---"
 missing=0

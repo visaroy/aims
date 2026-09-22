@@ -10,7 +10,7 @@ printf '# Test data repo\n' > "$DATA/README.md"; mkdir -p "$DATA/sessions/work" 
 git -C "$DATA" add README.md && git -C "$DATA" commit -q -m init && git -C "$DATA" push -q -u origin main
 git -C "$DATA" worktree add -q -b "$BRANCH" "$WT" origin/main
 mkdir -p "$WT/sessions/work/$SID"
-printf '{"session_id":"%s","project":"meta","topic":"delta","agent":"test","branch":"%s","status":"active","environment":{}}\n' "$SID" "$BRANCH" > "$WT/sessions/work/$SID/metadata.json"
+printf '{"session_id":"%s","project":"meta","topic":"delta","agent":"test","branch":"%s","status":"active","scope":["path:delta"],"environment":{}}\n' "$SID" "$BRANCH" > "$WT/sessions/work/$SID/metadata.json"
 printf '# Worklog\n' > "$WT/sessions/work/$SID/worklog.md"
 git -C "$WT" add sessions/work && git -C "$WT" commit -q -m start && git -C "$WT" push -q -u origin "$BRANCH"
 base="$(git -C "$WT" rev-parse HEAD)"
