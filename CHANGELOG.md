@@ -1,5 +1,8 @@
 # Changelog
 
+## Unreleased
+- Fixed same-machine orphan diagnosis treating `kill -0` permission denial as a dead process. Liveness now uses the OS-observed PID start marker and still rejects PID reuse; regression covers a live protected PID.
+
 ## 3.0.0 — 2026-09-22
 - Breaking policy change: valid detected scope overlaps are now advisory. `aims start` prints the conflict diagnostics and a `WARN`, then proceeds after the existing short machine-local and Git admission serialization/retry; malformed scopes, origin/Git/lease failures, and unverifiable rechecks remain blocking.
 - Added `dashboard:` as an exact-match scope kind.

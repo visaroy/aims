@@ -24,6 +24,13 @@ assert o.get('last_heartbeat'), 'last_heartbeat not stamped'
 PY
 echo 'PASS: aims start stamps OS-observed facts (hostname, ancestor pid, heartbeat) into metadata'
 
+# --- PID visibility must not confuse permission denial with a dead process ---
+. "$ENGINE_ROOT/lib/aims-observed-facts"
+init_started="$(aims_process_started_marker 1)"
+[ -n "$init_started" ] || { echo 'FAIL: could not observe PID 1 start marker' >&2; exit 1; }
+aims_process_is_alive 1 "$init_started" || { echo 'FAIL: live PID 1 was treated as dead when kill -0 may return EPERM' >&2; exit 1; }
+echo 'PASS: a live protected PID is considered alive by its observed ps start marker'
+
 # --- aims heartbeat bumps last_heartbeat and pushes ---
 before="$(python3 -c 'import json;print(json.load(open("'"$meta"'"))["observed"]["last_heartbeat"])')"
 sleep 1

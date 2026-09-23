@@ -19,17 +19,15 @@ aims_process_started_marker() {
 }
 aims_process_is_alive() {
   # aims_process_is_alive <pid> <expected-started-marker>
-  # True only if a process with this PID exists right now AND (when an
-  # expected start marker was recorded) its current start time still matches
-  # it — this guards against PID reuse: a different process that happens to
-  # have been assigned the same PID later is correctly treated as "not the
-  # same process," never as "still alive."
+  # Process visibility is determined by ps, not kill -0: macOS returns EPERM
+  # for protected but live processes (including PID 1), which is not evidence
+  # that the process is dead. Compare start time to protect against PID reuse.
   local pid="$1" expected="$2" current
   [ -n "$pid" ] || return 1
-  kill -0 "$pid" 2>/dev/null || return 1
-  [ -n "$expected" ] || return 0
   current="$(aims_process_started_marker "$pid")"
-  [ -n "$current" ] && [ "$current" = "$expected" ]
+  [ -n "$current" ] || return 1
+  [ -n "$expected" ] || return 0
+  [ "$current" = "$expected" ]
 }
 aims_scope_hash() {
   # Stable digest of a (caller-normalized) scope CSV, used as the local lock
