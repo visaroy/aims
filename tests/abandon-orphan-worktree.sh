@@ -375,7 +375,7 @@ PY
   make_scaffold "$sid" "$override"
   expect_failure "reject malformed observed $field" "$sid" --empty-only --confirm-orphan "$sid"; clean_case "$sid"
 done
-sid=other-host
+sid='other-host'
 make_scaffold "$sid" "$(python3 - "$valid_observed" <<'PY'
 import json,sys
 observed=json.loads(sys.argv[1]); observed['hostname']='different-host'; print(json.dumps({'observed':observed}, separators=(',', ':')))
@@ -386,7 +386,7 @@ pass 'each observed field requires valid structure and the current aims_hostname
 
 for key in session_id branch worktree; do
   case "$key" in
-    session_id) value=other-session ;;
+    session_id) value='other-session' ;;
     branch) value=ai/other-session ;;
     worktree) value="$TMP/not-canonical" ;;
   esac
