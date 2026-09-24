@@ -1,9 +1,23 @@
 #!/usr/bin/env bash
 set -euo pipefail
-sid="${1:-}"; [ "${2:-}" = --empty-only ] && [ "$#" -eq 2 ] || { echo 'usage: aims abandon <session-id> --empty-only' >&2; exit 2; }
+sid="${1:-}"; mode=""
+if [ "$#" -eq 2 ] && [ "${2:-}" = --empty-only ]; then
+  mode=default
+elif [ "$#" -eq 4 ] && [ "${2:-}" = --empty-only ] && [ "${3:-}" = --confirm-orphan ] && [ "${4:-}" = "$sid" ]; then
+  mode=orphan
+else
+  echo 'usage: aims abandon <session-id> --empty-only' >&2
+  exit 2
+fi
 [[ "$sid" =~ ^[A-Za-z0-9._-]+$ ]] || { echo "ERROR: unsafe session id: $sid" >&2; exit 2; }
+if [ "$mode" = orphan ]; then
+  echo 'WARNING: AIMS cannot detect uncommitted work in another clone; --confirm-orphan is explicit operator authority, not proof that no other writer exists.' >&2
+fi
 repo="${AIMS_HOME:-$HOME/.aims}"; branch="ai/$sid"; wt="$repo/.worktrees/$sid"
 if [ -n "${AIMS_ROOT:-}" ]; then AIMS_LIB="$AIMS_ROOT/lib"; else AIMS_LIB="$(cd "$(dirname "$0")" && pwd)"; fi
+if [ "$mode" = orphan ]; then
+  :
+else
 . "$AIMS_LIB/aims-scope-locks"
 . "$AIMS_LIB/aims-lifecycle-guard"
 . "$AIMS_LIB/aims-scaffold-check"
@@ -15,10 +29,205 @@ metadata="$(git -C "$repo" show "origin/$branch:sessions/work/$sid/metadata.json
 [ "$(META="$metadata" python3 -c 'import json,os,sys; m=json.loads(os.environ["META"]); print("yes" if m.get("session_id")==sys.argv[1] and m.get("status")=="active" else "no")' "$sid")" = yes ] || { echo 'REFUSE: session metadata is not an active scaffold.' >&2; exit 1; }
 [ -d "$wt" ] || { echo 'REFUSE: abandon requires the local pristine session worktree.' >&2; exit 1; }
 [ "$(git -C "$wt" branch --show-current)" = "$branch" ] || { echo 'REFUSE: local worktree branch does not match.' >&2; exit 1; }
-[ -z "$(git -C "$wt" status --porcelain)" ] || { echo 'REFUSE: local worktree is dirty.' >&2; exit 1; }
-[ "$(git -C "$wt" rev-parse HEAD)" = "$oid" ] || { echo 'REFUSE: local worktree has commits not on origin.' >&2; exit 1; }
-if git -C "$repo" show-ref --verify --quiet "refs/heads/$branch"; then [ "$(git -C "$repo" rev-parse "refs/heads/$branch")" = "$oid" ] || { echo 'REFUSE: local branch has commits not on origin.' >&2; exit 1; }; fi
+if worktree_status="$(git -C "$wt" status --porcelain 2>/dev/null)"; then
+  [ -z "$worktree_status" ] || { echo 'REFUSE: local worktree is dirty.' >&2; exit 1; }
+else
+  echo 'REFUSE: local worktree status is unverifiable.' >&2
+  exit 1
+fi
+worktree_oid="$(git -C "$wt" rev-parse HEAD 2>/dev/null)" || { echo 'REFUSE: local worktree HEAD is unverifiable.' >&2; exit 1; }
+[ "$worktree_oid" = "$oid" ] || { echo 'REFUSE: local worktree has commits not on origin.' >&2; exit 1; }
+if git -C "$repo" show-ref --verify --quiet "refs/heads/$branch"; then
+  local_oid="$(git -C "$repo" rev-parse "refs/heads/$branch" 2>/dev/null)" || { echo 'REFUSE: local branch is unverifiable.' >&2; exit 1; }
+  [ "$local_oid" = "$oid" ] || { echo 'REFUSE: local branch has commits not on origin.' >&2; exit 1; }
+else
+  show_ref_status=$?
+  [ "$show_ref_status" -eq 1 ] || { echo 'REFUSE: local branch presence is unverifiable.' >&2; exit 1; }
+fi
 git -C "$repo" push --force-with-lease="refs/heads/$branch:$oid" origin ":refs/heads/$branch" || { echo 'ERROR: remote session advanced; preserved.' >&2; exit 1; }
-[ ! -d "$wt" ] || git -C "$repo" worktree remove "$wt" --force
-git -C "$repo" update-ref -d "refs/heads/$branch" "$oid" 2>/dev/null || true
+if [ -d "$wt" ]; then
+  if post_worktree_status="$(git -C "$wt" status --porcelain 2>/dev/null)"; then
+    [ -z "$post_worktree_status" ] || { echo 'PARTIAL: remote session deleted, but the local worktree became dirty; local state preserved.' >&2; exit 1; }
+  else
+    echo 'PARTIAL: remote session deleted, but local worktree status is unverifiable; local state preserved.' >&2
+    exit 1
+  fi
+  git -C "$repo" worktree remove "$wt" || { echo 'PARTIAL: remote session deleted, but local worktree removal failed; local state preserved.' >&2; exit 1; }
+fi
+if git -C "$repo" show-ref --verify --quiet "refs/heads/$branch"; then
+  local_oid="$(git -C "$repo" rev-parse "refs/heads/$branch" 2>/dev/null)" || { echo 'PARTIAL: remote session deleted, but local branch is unverifiable; local state preserved.' >&2; exit 1; }
+  [ "$local_oid" = "$oid" ] || { echo 'PARTIAL: remote session deleted, but the local branch changed; local state preserved.' >&2; exit 1; }
+  git -C "$repo" update-ref -d "refs/heads/$branch" "$oid" 2>/dev/null || { echo 'PARTIAL: remote session deleted, but exact-OID local cleanup failed; local state preserved.' >&2; exit 1; }
+else
+  show_ref_status=$?
+  [ "$show_ref_status" -eq 1 ] || { echo 'PARTIAL: remote session deleted, but local branch cleanup is unverifiable; local state preserved.' >&2; exit 1; }
+fi
+if git -C "$repo" show-ref --verify --quiet "refs/heads/$branch"; then
+  echo 'PARTIAL: remote session deleted, but the local branch remains; local state preserved.' >&2
+  exit 1
+else
+  show_ref_status=$?
+  [ "$show_ref_status" -eq 1 ] || { echo 'PARTIAL: remote session deleted, but local branch verification failed; local state preserved.' >&2; exit 1; }
+fi
 echo "OK: abandoned empty session $sid"
+exit 0
+fi
+
+. "$AIMS_LIB/aims-scope-locks"
+. "$AIMS_LIB/aims-lifecycle-guard"
+. "$AIMS_LIB/aims-scaffold-check"
+. "$AIMS_LIB/aims-observed-facts"
+aims_refuse_delegate
+aims_orphan_metadata_valid() {
+  local metadata="$1" expected_worktree="$2" observed_host="$3"
+  local scope_csv canonical_scope_csv metadata_scope_json canonical_scope_json
+  if ! scope_csv="$(META="$metadata" python3 - <<'PY'
+import json,os,sys
+try:
+    metadata=json.loads(os.environ['META'])
+    scope=metadata['scope']
+    if not isinstance(scope,list) or not scope or any(not isinstance(item,str) for item in scope):
+        raise ValueError
+    print(','.join(scope))
+except (KeyError,TypeError,ValueError):
+    raise SystemExit(1)
+PY
+)"; then return 1; fi
+  if ! canonical_scope_csv="$(aims_scope_csv "$scope_csv")"; then return 1; fi
+  metadata_scope_json="$(META="$metadata" python3 - <<'PY'
+import json,os
+print(json.dumps(json.loads(os.environ['META'])['scope'],separators=(',',':')))
+PY
+)" || return 1
+  canonical_scope_json="$(AIMS_SCOPE_CSV="$canonical_scope_csv" python3 - <<'PY'
+import json,os
+print(json.dumps(os.environ['AIMS_SCOPE_CSV'].split(','),separators=(',',':')))
+PY
+)" || return 1
+  [ "$metadata_scope_json" = "$canonical_scope_json" ] || return 1
+  META="$metadata" python3 - "$sid" "$branch" "$expected_worktree" "$observed_host" <<'PY'
+import datetime
+import json
+import os
+import re
+import sys
+
+sid, branch, expected_worktree, observed_host = sys.argv[1:]
+try:
+    metadata = json.loads(os.environ['META'])
+except (KeyError, TypeError, ValueError):
+    raise SystemExit(1)
+if not isinstance(metadata, dict):
+    raise SystemExit(1)
+if metadata.get('session_id') != sid or metadata.get('branch') != branch or metadata.get('status') != 'active':
+    raise SystemExit(1)
+if metadata.get('worktree') != expected_worktree or not os.path.isabs(expected_worktree):
+    raise SystemExit(1)
+if os.path.realpath(expected_worktree) != expected_worktree:
+    raise SystemExit(1)
+current = os.path.abspath(os.sep)
+for component in expected_worktree.split(os.sep):
+    if not component:
+        continue
+    current = os.path.join(current, component)
+    if os.path.islink(current):
+        raise SystemExit(1)
+observed = metadata.get('observed')
+if not isinstance(observed, dict):
+    raise SystemExit(1)
+required = ('hostname', 'ancestor_pid', 'ancestor_pid_started', 'last_heartbeat')
+if any(key not in observed for key in required):
+    raise SystemExit(1)
+hostname = observed['hostname']
+pid = observed['ancestor_pid']
+started = observed['ancestor_pid_started']
+heartbeat = observed['last_heartbeat']
+if not isinstance(hostname, str) or not hostname or '\n' in hostname or '\r' in hostname or hostname != observed_host:
+    raise SystemExit(1)
+if not isinstance(pid, str) or not re.fullmatch(r'[1-9][0-9]*', pid):
+    raise SystemExit(1)
+if not isinstance(started, str) or '\n' in started or '\r' in started:
+    raise SystemExit(1)
+parts = started.split()
+if len(parts) != 5 or not re.fullmatch(r'[0-9]{2}:[0-9]{2}:[0-9]{2}', parts[3]) or not re.fullmatch(r'[0-9]{4}', parts[4]) or not any(re.fullmatch(r'[0-9]{1,2}', part) for part in parts[1:3]):
+    raise SystemExit(1)
+hour, minute, second = [int(part) for part in parts[3].split(':')]
+if hour > 23 or minute > 59 or second > 59:
+    raise SystemExit(1)
+if not isinstance(heartbeat, str) or not re.fullmatch(r'[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z', heartbeat):
+    raise SystemExit(1)
+try:
+    datetime.datetime.strptime(heartbeat, '%Y-%m-%dT%H:%M:%SZ')
+except ValueError:
+    raise SystemExit(1)
+PY
+}
+aims_orphan_worktree_clear() {
+  local listed grep_status=0
+  [ ! -e "$expected_worktree" ] && [ ! -L "$expected_worktree" ] || return 1
+  if ! listed="$(git -C "$repo" worktree list --porcelain 2>/dev/null)"; then return 2; fi
+  printf '%s\n' "$listed" | grep -Fqx "branch refs/heads/$branch" || grep_status=$?
+  case "$grep_status" in
+    0) return 1 ;;
+    1) return 0 ;;
+    *) return 2 ;;
+  esac
+}
+aims_orphan_local_ref_matches() {
+  local local_oid show_ref_status
+  if git -C "$repo" show-ref --verify --quiet "refs/heads/$branch"; then
+    local_oid="$(git -C "$repo" rev-parse "refs/heads/$branch")" || return 1
+    [ "$local_oid" = "$oid" ] || return 1
+  else
+    show_ref_status=$?
+    [ "$show_ref_status" -eq 1 ] || return 2
+  fi
+  return 0
+}
+repo_real="$(cd "$repo" && pwd -P)" || { echo 'REFUSE: AIMS data repo is unavailable.' >&2; exit 1; }
+expected_worktree="$repo_real/.worktrees/$sid"
+git -C "$repo" fetch -q origin main "refs/heads/$branch:refs/remotes/origin/$branch" || { echo "ERROR: active session not found: $sid" >&2; exit 1; }
+oid="$(git -C "$repo" rev-parse "origin/$branch")"
+metadata="$(git -C "$repo" show "origin/$branch:sessions/work/$sid/metadata.json" 2>/dev/null)" || { echo 'REFUSE: session metadata is unavailable.' >&2; exit 1; }
+observed_host="$(aims_hostname)"
+aims_orphan_metadata_valid "$metadata" "$expected_worktree" "$observed_host" || { echo 'REFUSE: orphan metadata is missing, legacy, malformed, or does not identify this session.' >&2; exit 1; }
+aims_is_exact_orphan_scaffold "$repo" "$branch" "$sid" || { echo 'REFUSE: session is not an exact pristine orphan scaffold.' >&2; exit 1; }
+aims_orphan_worktree_clear || { echo 'REFUSE: canonical or registered session worktree exists.' >&2; exit 1; }
+aims_orphan_local_ref_matches || { echo 'REFUSE: local session branch is ahead of or diverged from the fetched remote tip.' >&2; exit 1; }
+# Recheck local ownership immediately before the exact remote lease mutation.
+aims_orphan_worktree_clear || { echo 'REFUSE: session worktree appeared before remote deletion.' >&2; exit 1; }
+aims_orphan_local_ref_matches || { echo 'REFUSE: local session branch changed before remote deletion.' >&2; exit 1; }
+if ! git -C "$repo" push --force-with-lease="refs/heads/$branch:$oid" origin ":refs/heads/$branch"; then
+  if remote_state="$(git -C "$repo" ls-remote origin "refs/heads/$branch" 2>/dev/null)"; then
+    if [ -n "$remote_state" ]; then echo 'ERROR: remote session advanced or server rejected deletion; preserved.' >&2; else echo 'PARTIAL: remote session disappeared during a rejected delete; local state preserved.' >&2; fi
+  else
+    echo 'ERROR: remote delete failed and its final state is unverifiable; local state preserved.' >&2
+  fi
+  exit 1
+fi
+if remote_state="$(git -C "$repo" ls-remote origin "refs/heads/$branch" 2>/dev/null)"; then
+  [ -z "$remote_state" ] || { echo 'PARTIAL: remote delete reported success but the session branch remains; local state preserved.' >&2; exit 1; }
+else
+  echo 'PARTIAL: remote delete completed but its final state is unverifiable; local state preserved.' >&2
+  exit 1
+fi
+aims_orphan_worktree_clear || { echo 'PARTIAL: remote session deleted, but a worktree appeared; local state preserved.' >&2; exit 1; }
+aims_orphan_local_ref_matches || { echo 'PARTIAL: remote session deleted, but the local branch changed; local state preserved.' >&2; exit 1; }
+if git -C "$repo" show-ref --verify --quiet "refs/heads/$branch"; then
+  git -C "$repo" update-ref -d "refs/heads/$branch" "$oid" 2>/dev/null || { echo 'PARTIAL: remote session deleted, but exact-OID local cleanup failed; local state preserved.' >&2; exit 1; }
+else
+  show_ref_status=$?
+  if [ "$show_ref_status" -ne 1 ]; then
+    echo 'PARTIAL: remote session deleted, but local branch cleanup verification failed; local state preserved.' >&2
+    exit 1
+  fi
+fi
+aims_orphan_worktree_clear || { echo 'PARTIAL: remote session deleted, but a worktree appeared during local cleanup; local state preserved.' >&2; exit 1; }
+if git -C "$repo" show-ref --verify --quiet "refs/heads/$branch"; then
+  echo 'PARTIAL: remote session deleted, but the local branch remains; local state preserved.' >&2
+  exit 1
+else
+  show_ref_status=$?
+  [ "$show_ref_status" -eq 1 ] || { echo 'PARTIAL: remote session deleted, but local branch verification failed; local state preserved.' >&2; exit 1; }
+fi
+echo "OK: abandoned confirmed orphan session $sid"

@@ -20,3 +20,28 @@ aims_is_pristine_scaffold() {
   done
   return 0
 }
+
+# Override-only proof: unlike the legacy/default check, require the complete
+# six-file start scaffold and verify every blob through the fetched remote tip.
+aims_is_exact_orphan_scaffold() {
+  local repo="$1" branch="$2" sid="$3" base paths expected file ref
+  ref="origin/$branch"
+  base="$(git -C "$repo" merge-base origin/main "$ref" 2>/dev/null)" || return 1
+  [ "$(git -C "$repo" rev-list --count "$base..$ref" 2>/dev/null)" = 1 ] || return 1
+  paths="$(git -C "$repo" diff --name-only "$base" "$ref" 2>/dev/null)" || return 1
+  expected="$(printf '%s\n' \
+    "sessions/work/$sid/commands.md" \
+    "sessions/work/$sid/final-summary.md" \
+    "sessions/work/$sid/metadata.json" \
+    "sessions/work/$sid/prompt-log.md" \
+    "sessions/work/$sid/tests.md" \
+    "sessions/work/$sid/worklog.md")"
+  [ "$paths" = "$expected" ] || return 1
+  for file in metadata.json worklog.md commands.md tests.md final-summary.md prompt-log.md; do
+    [ "$(git -C "$repo" cat-file -t "$ref:sessions/work/$sid/$file" 2>/dev/null)" = blob ] || return 1
+  done
+  for file in worklog.md commands.md tests.md final-summary.md prompt-log.md; do
+    [ "$(git -C "$repo" cat-file -s "$ref:sessions/work/$sid/$file" 2>/dev/null)" = 0 ] || return 1
+  done
+  return 0
+}
