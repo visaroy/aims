@@ -87,6 +87,24 @@ An adapter must never silently run `aims publish`, bypass a confirmation prompt,
 flags, relax secret scanning, or invoke an agent's unrestricted auto-approval mode. Hooks may provide
 non-mutating reminders and diagnostics, but must not perform lifecycle mutations in the background.
 
+### Parent-owned lifecycle for child agents
+
+An orchestrated top-level task has one parent-owned AIMS session. Once it exists, native helper agents
+are delegates, not independent AIMS sessions: they must not run `aims start`, `save`, `handoff`,
+`adopt`, `publish`, or `continue`, and must not create a second AIMS session worktree. The parent
+assigns code worktrees/scopes to children and alone owns AIMS save, handoff, adopt, and publish.
+
+`aims_refuse_delegate` blocks lifecycle calls only when the child receives `AIMS_SESSION_ID`;
+`--parent-session` records lineage but does not propagate runtime context. `aims delegate-exec`
+propagates the parent/delegate environment for CLI subprocesses. Native-agent adapters must propagate
+that context when supported; otherwise they must enforce the parent-owned lifecycle rule in the child
+tool/prompt policy. They must not claim that AIMS itself can identify every uninstrumented native child.
+
+**Acceptance:** in an isolated data repo, start one parent session, launch a child with the parent AIMS
+context, and verify the child's attempted `aims start` is refused without creating another branch or
+worktree; verify the parent can still save/publish. Also test/document the runtime path used when a
+native child cannot inherit environment variables.
+
 ### Portable output
 
 All durable state remains in the AIMS data repository and the configured Git remote. Adapter-specific
