@@ -1,13 +1,13 @@
 # Changelog
 
-## Unreleased
-- Fixed same-machine orphan diagnosis treating `kill -0` permission denial as a dead process. Liveness now uses the OS-observed PID start marker and still rejects PID reuse; regression covers a live protected PID.
-
-## 3.0.0 — 2026-09-22
+## 3.0.0 — 2026-09-25
 - Breaking policy change: valid detected scope overlaps are now advisory. `aims start` prints the conflict diagnostics and a `WARN`, then proceeds after the existing short machine-local and Git admission serialization/retry; malformed scopes, origin/Git/lease failures, and unverifiable rechecks remain blocking.
 - Added `dashboard:` as an exact-match scope kind.
 - Handed-off `aims adopt` now validates the target scope and prints advisory overlap diagnostics before the existing handoff, ancestry, and lease guardrails; non-handoff adoption remains rejected.
 - Added `tests/advisory-overlap-policy.sh` and updated overlap/race regressions for the new policy. Migration: agents must treat valid overlap warnings as advisory and continue; do not bypass malformed-scope or transport/lease failures.
+- Fixed same-machine orphan diagnosis treating `kill -0` permission denial as a dead process. Liveness now uses the OS-observed PID start marker and still rejects PID reuse; regression covers a live protected PID.
+- Added safe batched secret scanning (merged PR #16).
+- Added explicit pristine-orphan recovery and made `aims abandon` cleanup fail closed (merged PR #17).
 
 ## 2.1.2 — 2026-09-10
 - `aims conflicts` no longer prints the raw Python `ERROR: active session metadata has missing or invalid scope.` line for a legacy invalid-scope session alongside its own `WARN:` — that stderr output is now suppressed so only the single, actionable `WARN:` line is shown per offending session. No behavior change from 2.1.1: the session is still excluded from the result and the scope verdict is unaffected.
