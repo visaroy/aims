@@ -1,3 +1,0 @@
-[hosts."deepwiki.com"]
-concurrency = 1
-request_interval = "2s"
