@@ -1,5 +1,8 @@
 # Changelog
 
+## Unreleased
+- Documentation-only: clarified session-scoped AIMS opt-in: a clear current-task marker naming AIMS authorizes the normal lifecycle without per-command consent, while “save and close the AIMS session” explicitly authorizes final publication. Engine installation, update, or repair remains separate explicit permission; absent-engine tasks must ask, non-opted tasks use native agent mechanisms, and external schedulers remain separate opt-in integrations. The CLI has no daemon or implicit session creation.
+
 ## 3.0.0 — 2026-09-25
 - Breaking policy change: valid detected scope overlaps are now advisory. `aims start` prints the conflict diagnostics and a `WARN`, then proceeds after the existing short machine-local and Git admission serialization/retry; malformed scopes, origin/Git/lease failures, and unverifiable rechecks remain blocking.
 - Added `dashboard:` as an exact-match scope kind.

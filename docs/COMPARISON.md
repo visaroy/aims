@@ -70,7 +70,7 @@ the work across machines and across tools.**
 ## Sources
 
 - Claude Code — resume/continue and transcript storage (Anthropic docs).
-- [Codex CLI: session resumption & rollout persistence](https://deepwiki.com/openai/codex/4.4-session-resumption-and-forking) · [resume how-to](https://inventivehq.com/knowledge-base/openai/how-to-resume-sessions)
-- [opencode: storage & database](https://deepwiki.com/sst/opencode/2.9-storage-and-database)
+- [Codex CLI: resume and fork commands](https://github.com/openai/codex/blob/main/codex-rs/cli/src/main.rs) · [thread persistence](https://github.com/openai/codex/tree/main/codex-rs/thread-store/src/local) · [resume how-to](https://inventivehq.com/knowledge-base/openai/how-to-resume-sessions)
+- [opencode: database layer](https://github.com/anomalyco/opencode/tree/dev/packages/core/src/database) · [session and file storage](https://github.com/anomalyco/opencode/blob/dev/packages/opencode/src/storage/storage.ts)
 - [Gemini CLI: session management](https://geminicli.com/docs/cli/session-management/) · [checkpointing](https://geminicli.com/docs/cli/checkpointing/)
 - Aider — chat history & git integration (Aider docs).

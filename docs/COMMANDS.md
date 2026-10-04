@@ -3,6 +3,25 @@
 All commands operate on `AIMS_HOME` (default `~/.aims`). Session ids are
 `<UTC-timestamp>-<project>-<topic>-<agent>`.
 
+## Explicit invocation policy
+
+AIMS consent is scoped to the current task, not to each command. A clear current-task marker naming
+AIMS at the beginning, middle, or end — for example, “This is an AIMS session”, “Use AIMS”, or “Save
+the AIMS session” — opts that task into the standard AIMS lifecycle. Once opted in, the agent may use
+the normal lifecycle commands needed for that session without separate consent for every operation.
+“Save and close the AIMS session” is an explicit request to finish and publish it; session opt-in alone
+does not imply closure.
+
+Mere discussion or documentation of AIMS, ordinary coding, or a new conversation is not consent.
+Without a current-task marker, use native agent mechanisms and do not invoke AIMS. Engine installation,
+update, or repair is a separate explicit permission; if the engine is absent, ask rather than infer
+permission from session opt-in. The CLI has no daemon and creates no session implicitly.
+
+AIMS commands are caller-triggered and never run automatically. Externally configured schedulers, such
+as a systemd timer, LaunchAgent, or CI job, are separate opt-in integrations. AIMS does not configure
+or start such a scheduler automatically, and any scheduled invocation must itself be explicitly
+authorized by the user.
+
 ### `aims init [dir]`
 Scaffold a data repo: `sessions/work/`, `.worktrees/`, `SESSIONS.md`, gitignored `credentials/`.
 
@@ -26,7 +45,8 @@ standard overlapping-scope conflict check.
 ### `aims heartbeat <session-id>`  *(inside a worktree)*
 Bumps `metadata.json`'s `observed.last_heartbeat` to now and pushes that single-field change,
 without doing a full `aims save` commit-diff. Intended for a long-running task that would otherwise
-show a stale heartbeat, or for an external, opt-in scheduler. `aims save` already bumps this as a
+show a stale heartbeat, or for an external, opt-in scheduler. It remains caller-triggered and does
+not run automatically. `aims save` already bumps this as a
 side effect on every save that has something to commit, so most sessions never need to call this
 directly.
 
@@ -106,7 +126,7 @@ aims adopt 20260727T141115Z-meta-aims-bulk-handoff-recovery-and-checkpointing-he
 Only after the work is verified and actually complete should `aims publish <session-id>` be used.
 
 ### `aims checkpoint <session-id>|--all`  *(from `AIMS_HOME`)*
-Commits and pushes one selected local session, or every valid local session with `--all`, without changing its `active`/`handoff` status. It scans for secrets before staging. This is the primitive intended for an opt-in systemd user timer or macOS LaunchAgent; scheduling remains external so AIMS does not install a background service without explicit user consent.
+Commits and pushes one selected local session, or every valid local session with `--all`, without changing its `active`/`handoff` status. It scans for secrets before staging. This is the primitive intended for an externally configured, opt-in systemd user timer or macOS LaunchAgent; scheduling remains separate and caller-configured, so AIMS does not install or start a background service automatically.
 
 ### `aims brief <session-id>`  *(from `AIMS_HOME`)*
 Creates an optional English `sessions/work/<session-id>/handoff.md` from the built-in template. It never overwrites an existing brief and does not replace the chronological `worklog.md`.
