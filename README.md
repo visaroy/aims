@@ -3,14 +3,35 @@
 **AI Multi-agent Sessions** — git-native session management for AI coding agents,
 across many machines and many agents.
 
-![Version](https://img.shields.io/badge/Version-v3.0.0-blue) ![Last Update](https://img.shields.io/badge/Update-2026--09--25-orange) [![AIMS CI](https://github.com/visaroy/aims/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/visaroy/aims/actions/workflows/ci.yml) ![status](https://img.shields.io/badge/status-stable-blue) ![license](https://img.shields.io/badge/license-MIT-blue) ![shell](https://img.shields.io/badge/shell-bash-121011)
+![Version](https://img.shields.io/badge/Version-v3.0.0-blue) ![Last Update](https://img.shields.io/badge/Update-2026--10--02-orange) [![AIMS CI](https://github.com/visaroy/aims/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/visaroy/aims/actions/workflows/ci.yml) ![status](https://img.shields.io/badge/status-stable-blue) ![license](https://img.shields.io/badge/license-MIT-blue) ![shell](https://img.shields.io/badge/shell-bash-121011)
 
 AIMS turns each unit of AI work into a **git branch in an isolated worktree**. Sessions can be
 **handed off** between machines and **adopted** by any agent — because the source of truth is a
 git remote (`origin`), never a machine-to-machine link. No agent needs access to another's computer.
 
-**You never learn AIMS commands.** Your agent does. You talk to it normally — *"save and close the
-session"*, *"hand this off to the other machine"* — and it runs AIMS for you.
+## Explicit invocation policy
+
+AIMS consent is scoped to the current task, not to each individual operation. A clear current-task
+marker naming AIMS at the beginning, middle, or end — for example, “This is an AIMS session”, “Use
+AIMS”, or “Save the AIMS session” — opts that task into the standard AIMS session lifecycle. Once
+opted in, the agent may use the normal lifecycle commands needed for that session without asking for
+separate consent for each command. “Save and close the AIMS session” is an explicit request to finish
+and publish it; session opt-in alone does not imply closure.
+
+Mere discussion or documentation of AIMS, ordinary coding, or a new conversation is not consent.
+Without a clear current-task marker, use the agent’s native session and checkpoint mechanisms and do
+not invoke AIMS. Engine installation, update, or repair is a separate permission boundary: session
+opt-in does not authorize it, and if the engine is absent, ask for explicit permission.
+
+The CLI has no daemon and creates no session implicitly. Agent instructions may call the CLI, but
+command behavior is always caller-triggered. An externally configured scheduler, such as a systemd
+timer, LaunchAgent, or CI job, is a separate opt-in integration; AIMS does not configure or start
+one automatically.
+
+Users do not need to memorize AIMS commands. After the current task is explicitly opted into AIMS,
+the agent can translate the task into the matching lifecycle commands. Consent applies to that task,
+not to later tasks, and must not be inferred from a general request to work, a mention outside the
+current task, or a new conversation.
 
 ## Stable release
 
@@ -29,8 +50,10 @@ Run the same workflow safely with disposable local repositories using the
 ## 🤖 Instructions for Your Agent
 
 > [!TIP]
-> **Don't install AIMS by hand — hand this to your agent.** Copy the prompt below to your AI coding
-> agent (Claude Code, Codex CLI, opencode, or Gemini CLI) and it will review and install AIMS for you.
+> **Don't install AIMS by hand — copy this explicit installation request to your agent.** Copy the
+> prompt below to your AI coding agent (Claude Code, Codex CLI, opencode, or Gemini CLI) only when you
+> explicitly want it to review and install AIMS. The prompt is not a default instruction, and it must
+> not run merely because this README is present or because an agent starts.
 
 ```text
 Install AIMS from its official public repository: https://github.com/visaroy/aims
@@ -55,7 +78,7 @@ Install AIMS from its official public repository: https://github.com/visaroy/aim
 4. Report what you reviewed, the security summary, which agent config files were changed (and
    where the backups are), and the final `aims doctor` output.
 
-To restore/update AIMS later, run `cd ~/aims && bash install.sh`: it prints `🔄 Restoring a fresh, official AIMS version from the official GitHub repository…`, fetches `origin/main`, then runs `git reset --hard origin/main` and `git clean -ffdx` before refreshing the command link. It deliberately deletes every local tracked, untracked, and ignored engine file (including nested worktrees such as `.slim/`) so `~/aims` is an exact official checkout; it still refuses a non-`main` branch.
+To restore/update AIMS later, run `cd ~/aims && bash install.sh` only after a separate explicit user request for that action: it prints `🔄 Restoring a fresh, official AIMS version from the official GitHub repository…`, fetches `origin/main`, then runs `git reset --hard origin/main` and `git clean -ffdx` before refreshing the command link. It deliberately deletes every local tracked, untracked, and ignored engine file (including nested worktrees such as `.slim/`) so `~/aims` is an exact official checkout; it still refuses a non-`main` branch.
 ```
 
 Running this on more than one machine, each pointed at the **same** private data repo, is the whole
@@ -104,8 +127,9 @@ Full breakdown across all tools: [`docs/COMPARISON.md`](docs/COMPARISON.md). A f
 ## Install
 
 Setup has two sides: the **agent environment** (the CLIs you talk to) and, optionally, a **hardware /
-storage environment** (a shared network store for large files). After setup you interact only with
-your agent in natural language — AIMS runs underneath.
+storage environment** (a shared network store for large files). After setup, mark the current task as
+an AIMS session when you want the standard AIMS lifecycle. Without that marker, use native agent
+mechanisms; AIMS does not run underneath automatically.
 
 ### 1. Prepare the agent environment
 
@@ -116,6 +140,10 @@ Also need `git`, `bash`, `python3` (macOS or Linux).
 
 ### 2. One-command setup
 
+Installation is a separate permission boundary from session opt-in. If the engine is absent, ask for
+explicit permission before installing it; do not infer installation, update, or repair permission from
+an AIMS session marker. The explicitly user-copied installation request above is the supported path.
+
 ```bash
 curl -fsSL https://raw.githubusercontent.com/visaroy/aims/main/bootstrap.sh | bash
 ```
@@ -123,7 +151,12 @@ curl -fsSL https://raw.githubusercontent.com/visaroy/aims/main/bootstrap.sh | ba
 This: installs the engine to `~/aims`, links the `aims` command, creates your private data repo
 (`~/.aims`), and **teaches every installed agent to understand AIMS** by writing an AIMS rules block
 into their config files (`~/AGENTS.md`, `~/.codex/AGENTS.md`, `~/.claude/CLAUDE.md`, `~/.gemini/GEMINI.md`).
-For a later engine restore/update, run `cd ~/aims && bash install.sh`: it announces the official-repository restore, fetches `origin/main`, then uses `git reset --hard origin/main` plus `git clean -ffdx` before refreshing the link. This deliberately removes local tracked, untracked, and ignored files — including nested worktrees such as `.slim/` — so `~/aims` is exactly the official engine; it refuses only a non-`main` branch. Full details, version-by-version migration notes, and rollback: [`docs/UPGRADING.md`](docs/UPGRADING.md).
+For a later engine restore/update, first obtain an explicit user request for that specific action,
+then run `cd ~/aims && bash install.sh`: it announces the official-repository restore, fetches
+`origin/main`, then uses `git reset --hard origin/main` plus `git clean -ffdx` before refreshing the
+link. This deliberately removes local tracked, untracked, and ignored files — including nested
+worktrees such as `.slim/` — so `~/aims` is exactly the official engine; it refuses only a non-`main`
+branch. Full details, version-by-version migration notes, and rollback: [`docs/UPGRADING.md`](docs/UPGRADING.md).
 
 Then point AIMS at your data repo and give it a remote so sessions sync across machines:
 
@@ -149,18 +182,24 @@ echo 'export AIMS_ARTIFACTS=$HOME/.aims-artifacts' >> ~/.bashrc   # mount point 
 Run step 2 on every machine and point them at the **same** `origin` data repo. That is the whole
 multi-machine setup — no machine ever connects to another; they meet on `origin`.
 
-### That's it — now just talk to your agent
+### That's it — opt in the current task when needed
 
-You do **not** memorize `aims start` / `aims save` / etc. Say what you want; the agent maps it:
+You do **not** need to memorize `aims start` / `aims save` / etc. A clear marker naming AIMS at any
+point in the current task opts the task into the normal lifecycle; no new consent is needed for each
+lifecycle command:
 
-> "start on the login bug" · "save the session" · "hand this off to the laptop" ·
-> "continue session 2026…-login-fix" · "save and close the session"
+> "This is an AIMS session for the login bug" · "Use AIMS for this task" · "Save the AIMS session"
+
+To finish, explicitly say “save and close the AIMS session”; that authorizes the final checkpoint and
+publish. Without an AIMS marker, use the native mechanisms provided by the agent instead.
 
 ---
 
 ## Reference (for agents, not users)
 
-> The commands below are what your **agent** runs after interpreting your intent. You never type them.
+> The commands below are what your **agent** may run after the current task has an explicit AIMS
+> marker. They are not background behavior or implied consent. Session consent covers the normal
+> lifecycle; engine installation, update, or repair still requires separate explicit permission.
 > They are documented so agents — and the curious — know exactly what happens.
 
 ```bash
