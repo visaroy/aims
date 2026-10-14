@@ -187,7 +187,7 @@ Checks git/bash/python3, the data repo, registry, and origin remote.
 Detects supported local agents and installs the marker-delimited AIMS rules into their configuration files. It previews the files first and asks for confirmation unless `AIMS_YES=1`; backups are created once and repeated runs are idempotent.
 
 ### `aims install-hooks`
-Installs or refreshes the data repo's pre-push guard. The guard blocks ordinary pushes to `main`; `aims publish` supplies the explicit integration context that permits the push.
+Installs or refreshes the data repo's pre-push guard. The guard blocks ordinary pushes to `main`; `aims publish` supplies the explicit integration context that permits the push. Work not opted into AIMS pushes a branch and merges it through a pull request; the guard's message names both paths.
 
 ### `aims preflight [mode]`
 Reports the current Git repository root and selected mode. This lightweight probe is intended for agent startup checks and refuses execution outside a Git repository.

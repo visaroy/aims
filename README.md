@@ -269,7 +269,8 @@ See [`docs/COMMANDS.md`](docs/COMMANDS.md), [`docs/ARCHITECTURE.md`](docs/ARCHIT
   blocking. `aims adopt` requires a handoff, claims active ownership, and a later adopter is refused
   until the next handoff. A machine-local scope lock inside `aims start` additionally serializes
   same-machine admission races before either writer reaches the git-level check.
-- **`main` is protected**: a `pre-push` hook blocks direct pushes; integration only via `aims publish`.
+- **`main` is protected**: a `pre-push` hook blocks direct pushes; integrate via `aims publish` in an AIMS
+  session, or push a branch and merge a pull request when the task is not opted into AIMS.
 - **No secrets, no external calls**: the engine talks only to your `origin`. See [`SECURITY.md`](SECURITY.md).
 - **Orphaned-session diagnosis, never silent auto-resolution**: `aims start` stamps OS-observed
   hostname, ancestor-process identity, and a heartbeat at creation. `aims conflicts` uses these facts
