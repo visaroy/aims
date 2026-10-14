@@ -20,8 +20,10 @@ and publish it; session opt-in alone does not imply closure.
 
 Mere discussion or documentation of AIMS, ordinary coding, or a new conversation is not consent.
 Without a clear current-task marker, use the agent’s native session and checkpoint mechanisms and do
-not invoke AIMS. Engine installation, update, or repair is a separate permission boundary: session
-opt-in does not authorize it, and if the engine is absent, ask for explicit permission.
+not invoke AIMS. Installation is a separate permission boundary: session opt-in does not authorize
+it, and if the engine is absent, ask for explicit permission. A user request to install AIMS is consent
+to the complete, documented installation (engine, data repo, guard, agent rules — see [Install](#install)),
+which is backed up and fully reversible with `aims uninstall`.
 
 The CLI has no daemon and creates no session implicitly. Agent instructions may call the CLI, but
 command behavior is always caller-triggered. An externally configured scheduler, such as a systemd
@@ -58,27 +60,27 @@ Run the same workflow safely with disposable local repositories using the
 ```text
 Install AIMS from its official public repository: https://github.com/visaroy/aims
 
-1. Review it first. Read README.md, SECURITY.md, and LICENSE, and skim bootstrap.sh,
-   install.sh, and lib/. Confirm for me that it: makes no network calls except `git` to
-   repositories I configure, ships no secrets or telemetry, needs no elevated privileges,
-   and backs up any file it modifies. Summarize the security posture before installing.
+1. Review it first. Read README.md, SECURITY.md, and LICENSE, and skim install.sh and lib/.
+   Confirm for me that it: makes no network calls except `git` to repositories I configure,
+   ships no secrets or telemetry, needs no elevated privileges, and backs up any file it
+   modifies. Summarize the security posture before installing.
 
 2. Install it (this accepts the MIT license and its "AS IS", no-warranty terms on my behalf):
-     curl -fsSL https://raw.githubusercontent.com/visaroy/aims/main/bootstrap.sh | AIMS_ACCEPT=1 bash
-   The installer links the `aims` command, creates my private data repo at ~/.aims, and adds an
-   AIMS rules block to the config of each AI agent it detects — backing up each original first.
+     curl -fsSL https://raw.githubusercontent.com/visaroy/aims/main/install.sh | AIMS_ACCEPT=1 bash
+   The installer checks for conflicts first, reuses my existing AIMS data repo if I have one
+   (otherwise it creates ~/.aims), installs the pre-push guard, and adds a marked AIMS rules
+   block to the config of each AI agent it detects. Every modified file is backed up and
+   `aims uninstall` reverts the installation.
 
-3. Give my data repo a remote so sessions sync across machines, then verify. Ask me for the URL
-   of a private git repo I control (create one if I don't have it), then run:
-     git -C ~/.aims remote add origin <MY_PRIVATE_DATA_REPO_URL>
-     git -C ~/.aims push -u origin main
+3. If my data repo has no remote, ask me for the URL of a private git repo I control (create
+   one if I don't have it), then run:
+     git -C "$(aims home)" remote add origin <MY_PRIVATE_DATA_REPO_URL>
+     git -C "$(aims home)" push -u origin main
      aims doctor
-   Also add `export AIMS_HOME=$HOME/.aims` to my shell profile.
 
-4. Report what you reviewed, the security summary, which agent config files were changed (and
-   where the backups are), and the final `aims doctor` output.
-
-To restore/update AIMS later, run `cd ~/aims && bash install.sh` only after a separate explicit user request for that action: it prints `🔄 Restoring a fresh, official AIMS version from the official GitHub repository…`, fetches `origin/main`, then runs `git reset --hard origin/main` and `git clean -ffdx` before refreshing the command link. It deliberately deletes every local tracked, untracked, and ignored engine file (including nested worktrees such as `.slim/`) so `~/aims` is an exact official checkout; it still refuses a non-`main` branch.
+4. Report the installer's final summary: the data repo it used, which agent config files were
+   changed (and which of them are tracked by Git and need a commit), where the backups are,
+   and the final `aims doctor` output.
 ```
 
 Running this on more than one machine, each pointed at the **same** private data repo, is the whole
@@ -145,25 +147,49 @@ explicit permission before installing it; do not infer installation, update, or 
 an AIMS session marker. The explicitly user-copied installation request above is the supported path.
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/visaroy/aims/main/bootstrap.sh | bash
+curl -fsSL https://raw.githubusercontent.com/visaroy/aims/main/install.sh | bash
 ```
 
-This: installs the engine to `~/aims`, links the `aims` command, creates your private data repo
-(`~/.aims`), and **teaches every installed agent to understand AIMS** by writing an AIMS rules block
-into their config files (`~/AGENTS.md`, `~/.codex/AGENTS.md`, `~/.claude/CLAUDE.md`, `~/.gemini/GEMINI.md`).
+There is one installer and no configuration. `install.sh` (or `aims install`, which runs the same
+steps) is idempotent: running it again refreshes everything it owns. In order, it:
+
+1. **Checks for conflicts before changing anything** — required tools, writable paths, unresolved Git
+   conflicts in target files, and data repo ambiguity. Only a real blocker stops it, with a message
+   naming the blocker and the fix; anything else is installed and reported.
+2. **Installs the engine** to `~/aims` and links the `aims` command into `~/.local/bin`.
+3. **Resolves the data repo — reuse first.** It uses the first existing one from `$AIMS_HOME`,
+   `~/.config/aims/home`, an `AIMS_HOME` export in your shell profile, or `~/.aims`; only when none
+   exists does it create `~/.aims`. Two different existing candidates are a blocker (rerun with
+   `AIMS_HOME=<path>`). The chosen path is recorded in `~/.config/aims/home`, so every agent and shell
+   finds it without profile edits.
+4. **Installs the `pre-push` guard** in the data repo.
+5. **Wires detected agents** (`~/AGENTS.md`, `~/.codex/AGENTS.md`, `~/.claude/CLAUDE.md`,
+   `~/.gemini/GEMINI.md`, following symlinks to the real file): it adds or refreshes one marked AIMS
+   rules block that contains only AIMS rules. Your own rules outside the block take precedence. A file
+   that already has its own AIMS text is still wired and reported as a possible duplicate.
+6. **Backs up every modified file** under `~/.local/state/aims/backups/` — never inside a repo.
+7. **Prints a final report**: data repo used, files changed, files tracked by Git that now need a
+   commit (integrate them through a branch and pull request; `main` is guarded), backups, and
+   `aims doctor`.
+
+`aims uninstall` removes the marked blocks, the guard, the command link, and the recorded data repo
+path, restoring from the backups where needed. It never deletes your data repo.
+`install.sh --fresh` starts over with a new data repo: the old one is moved aside to
+`<path>.aims-replaced-<UTC timestamp>`, never deleted, and the installer refuses while it still has
+uncommitted changes or commits that are not on its `origin`.
+
 For a later engine restore/update, first obtain an explicit user request for that specific action,
-then run `cd ~/aims && bash install.sh`: it announces the official-repository restore, fetches
+then run `bash ~/aims/install.sh`: it announces the official-repository restore, fetches
 `origin/main`, then uses `git reset --hard origin/main` plus `git clean -ffdx` before refreshing the
 link. This deliberately removes local tracked, untracked, and ignored files — including nested
 worktrees such as `.slim/` — so `~/aims` is exactly the official engine; it refuses only a non-`main`
 branch. Full details, version-by-version migration notes, and rollback: [`docs/UPGRADING.md`](docs/UPGRADING.md).
 
-Then point AIMS at your data repo and give it a remote so sessions sync across machines:
+If the data repo has no remote yet, give it one so sessions sync across machines:
 
 ```bash
-echo 'export AIMS_HOME=$HOME/.aims' >> ~/.bashrc   # or ~/.zshenv
-git -C ~/.aims remote add origin <your-private-data-repo-url>
-git -C ~/.aims push -u origin main
+git -C "$(aims home)" remote add origin <your-private-data-repo-url>
+git -C "$(aims home)" push -u origin main
 aims doctor
 ```
 
@@ -231,7 +257,11 @@ aims publish <session-id>                        # merge to main, register, done
 | `aims delegate-exec <id> -- <cmd...>` | Run a delegated subprocess with guaranteed session context |
 | `aims list [--handoff] [--stale] [--project <project>]` | List and filter active sessions |
 | `aims artifacts <id>` | Session dir in the shared store (`AIMS_ARTIFACTS`) |
-| `aims wire-agents` | (Re)write the AIMS rules into agent config files |
+| `aims install [--fresh]` | Install or refresh the engine link, data repo, guard, and agent rules (same as `install.sh`) |
+| `aims uninstall` | Revert the installation; the data repo is kept |
+| `aims home` | Print the resolved data repo path |
+| `aims init [dir]` | Deprecated in 3.1: create or reuse a data repo only; use `aims install` |
+| `aims wire-agents` | Add or refresh the marked AIMS rules block in detected agent config files |
 | `aims install-hooks` | Reinstall the data repo pre-push guard |
 | `aims doctor` | Health-check engine + data repo |
 | `aims preflight [mode]` | Report whether the current Git repo is ready for an AIMS session |
