@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
-# AIMS guard: block direct pushes to an EXISTING main; integration goes through `aims publish`
-# (which sets AIMS_PUBLISH=1). The initial creation of main (seeding a new remote) is allowed.
+# AIMS guard: block direct pushes to an EXISTING main; integrate via a pull request (no AIMS session)
+# or `aims publish` (AIMS session; sets AIMS_PUBLISH=1). The initial creation of main (seeding a new remote) is allowed.
 [ "${AIMS_PUBLISH:-0}" = "1" ] && exit 0
 while read -r _local _lsha remote _rsha; do
   [ "$remote" = "refs/heads/main" ] || continue
   case "$_rsha" in *[!0]*) ;; *) continue ;; esac   # all-zero remote sha = main does not exist yet (seed) -> allow
-  echo "BLOCKED: direct push to existing main. Integrate via: aims publish <session-id>" >&2; exit 1
+  echo "BLOCKED: direct push to existing main. Push a branch and merge it via a pull request; in an AIMS session use: aims publish <session-id>" >&2; exit 1
 done
 exit 0

@@ -1,6 +1,7 @@
 # Changelog
 
 ## Unreleased
+- The `pre-push` guard message now names the pull-request path for work not opted into AIMS, alongside `aims publish`; blocking behavior is unchanged. Regression: `tests/pre-push-guard.sh`.
 - Documentation-only: clarified session-scoped AIMS opt-in: a clear current-task marker naming AIMS authorizes the normal lifecycle without per-command consent, while “save and close the AIMS session” explicitly authorizes final publication. Engine installation, update, or repair remains separate explicit permission; absent-engine tasks must ask, non-opted tasks use native agent mechanisms, and external schedulers remain separate opt-in integrations. The CLI has no daemon or implicit session creation.
 
 ## 3.0.0 — 2026-09-25
