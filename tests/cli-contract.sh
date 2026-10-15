@@ -14,7 +14,7 @@ expect_status() {
 version="$(tr -d '\r\n' < "$ROOT/VERSION")"
 for form in help -h --help; do "$AIMS" "$form" | grep -q 'AIMS — AI Multi-agent Sessions'; done
 for form in version -v --version; do [ "$("$AIMS" "$form")" = "$version" ] || { echo "FAIL: $form output does not match VERSION" >&2; exit 1; }; done
-for command in init start save handoff handoff-all checkpoint brief rebase adopt publish abandon heartbeat delegate-exec list artifacts doctor wire-agents install-hooks preflight version; do
+for command in install uninstall home init start save handoff handoff-all checkpoint brief rebase adopt publish abandon heartbeat delegate-exec list artifacts doctor wire-agents install-hooks preflight version; do
   "$AIMS" help | grep -q "  $command" || { echo "FAIL: help omits public command $command" >&2; exit 1; }
 done
 expect_status 2 'unknown command' "$AIMS" unknown-command
@@ -43,6 +43,13 @@ expect_status 2 'list missing project value' "$AIMS" list --project
 expect_status 2 'artifacts extra argument' env AIMS_ARTIFACTS="$TMP/artifacts" "$AIMS" artifacts safe-id extra
 expect_status 2 'doctor extra argument' "$AIMS" doctor extra
 expect_status 2 'wire-agents extra argument' "$AIMS" wire-agents extra
+expect_status 2 'install extra argument' "$AIMS" install --fresh extra
+expect_status 2 'install unknown flag' "$AIMS" install --typo
+expect_status 2 'uninstall extra argument' "$AIMS" uninstall extra
+expect_status 2 'home extra argument' "$AIMS" home --explain extra
+expect_status 2 'home unknown flag' "$AIMS" home --typo
+expect_status 2 'wire-agents unknown flag' "$AIMS" wire-agents --typo
+[ ! -e "$HOME/.aims" ] && [ ! -e "$HOME/.config/aims" ] && [ ! -e "$HOME/.local" ] || { echo 'FAIL: invalid install/uninstall/home mutated HOME' >&2; exit 1; }
 expect_status 2 'install-hooks extra argument' "$AIMS" install-hooks extra
 expect_status 2 'preflight extra argument' "$AIMS" preflight write extra
 "$AIMS" init "$TMP/init-data" >/dev/null

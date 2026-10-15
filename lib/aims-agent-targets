@@ -1,0 +1,24 @@
+#!/usr/bin/env bash
+# Sourced helper: agent config files AIMS may wire. `aims_agent_candidates` prints "agent<TAB>file" for
+# detected agents; `aims_agent_candidates all` lists every known file (used by uninstall and doctor).
+aims_agent_candidates() {
+  local all="${1:-}"
+  { [ -n "$all" ] || command -v claude >/dev/null 2>&1; } && printf 'claude\t%s\n' "$HOME/.claude/CLAUDE.md"
+  { [ -n "$all" ] || command -v gemini >/dev/null 2>&1; } && printf 'gemini\t%s\n' "$HOME/.gemini/GEMINI.md"
+  { [ -n "$all" ] || command -v codex >/dev/null 2>&1; } && printf 'codex\t%s\ncodex\t%s\n' "$HOME/.codex/AGENTS.md" "$HOME/AGENTS.md"
+  { [ -n "$all" ] || command -v opencode >/dev/null 2>&1; } && printf 'opencode\t%s\n' "$HOME/AGENTS.md"
+  return 0
+}
+aims_realpath() { python3 -c 'import os,sys; print(os.path.realpath(sys.argv[1]))' "$1"; }  # portable; follows symlinks
+aims_writable_path() {  # can this file be created or rewritten by the current user?
+  local p="$1"
+  if [ -e "$p" ]; then [ -w "$p" ] && [ ! -d "$p" ]; return; fi
+  p="$(dirname "$p")"; while [ ! -e "$p" ]; do p="$(dirname "$p")"; done
+  [ -d "$p" ] && [ -w "$p" ]
+}
+aims_git_tracked() {  # print the repository root when the file is tracked by Git
+  local d b; d="$(dirname "$1")"; b="$(basename "$1")"
+  [ -d "$d" ] || return 1
+  git -C "$d" ls-files --error-unmatch -- "$b" >/dev/null 2>&1 || return 1
+  git -C "$d" rev-parse --show-toplevel
+}

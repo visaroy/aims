@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
+. "$(dirname "${BASH_SOURCE[0]}")/aims-home"  # single data repo resolver
 # Phase 3 (opt-in ceiling-raiser, not the floor guarantee — see Phase 1's
 # local lock for that): a native delegation primitive. An orchestrator that
 # wants FULL correctness calls this INSTEAD OF invoking a subagent CLI
@@ -30,7 +31,7 @@ sid="${1:-}"; shift || true
 [ "${1:-}" = "--" ] || { usage; exit 2; }
 shift
 [ "$#" -ge 1 ] || { usage; exit 2; }
-repo="${AIMS_HOME:-$HOME/.aims}"; branch="ai/$sid"; wt="$repo/.worktrees/$sid"
+repo="$(aims_home)"; branch="ai/$sid"; wt="$repo/.worktrees/$sid"
 if [ -n "${AIMS_ROOT:-}" ]; then AIMS_LIB="$AIMS_ROOT/lib"; else AIMS_LIB="$(cd "$(dirname "$0")" && pwd)"; fi
 . "$AIMS_LIB/aims-lifecycle-guard"
 . "$AIMS_LIB/aims-observed-facts"

@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
+. "$(dirname "${BASH_SOURCE[0]}")/aims-home"  # single data repo resolver
 sid="${1:-}"; mode=""
 if [ "$#" -eq 2 ] && [ "${2:-}" = --empty-only ]; then
   mode=default
@@ -13,7 +14,7 @@ fi
 if [ "$mode" = orphan ]; then
   echo 'WARNING: AIMS cannot detect uncommitted work in another clone; --confirm-orphan is explicit operator authority, not proof that no other writer exists.' >&2
 fi
-repo="${AIMS_HOME:-$HOME/.aims}"; branch="ai/$sid"; wt="$repo/.worktrees/$sid"
+repo="$(aims_home)"; branch="ai/$sid"; wt="$repo/.worktrees/$sid"
 if [ -n "${AIMS_ROOT:-}" ]; then AIMS_LIB="$AIMS_ROOT/lib"; else AIMS_LIB="$(cd "$(dirname "$0")" && pwd)"; fi
 if [ "$mode" = orphan ]; then
   :

@@ -1,0 +1,58 @@
+#!/usr/bin/env bash
+# Single data repo resolver. Sourced by every AIMS command (defines functions only) and runnable as
+# `aims home [--explain]`. Order: $AIMS_HOME, ~/.config/aims/home, an AIMS_HOME export parsed (never
+# executed) from a shell profile, ~/.aims.
+aims_config_file() { printf '%s\n' "${XDG_CONFIG_HOME:-$HOME/.config}/aims/home"; }
+aims_state_dir() { printf '%s\n' "${XDG_STATE_HOME:-$HOME/.local/state}/aims"; }
+aims_profiles() { printf '%s\n' "$HOME/.zshenv" "$HOME/.zprofile" "$HOME/.zshrc" "$HOME/.bash_profile" "$HOME/.bashrc" "$HOME/.profile"; }
+aims_expand_path() {  # expand a leading ~ / $HOME / ${HOME}; reject anything else that would need a shell
+  local v="$1"
+  # shellcheck disable=SC2088  # literal ~ patterns are intended
+  case "$v" in "~") v="$HOME" ;; "~/"*) v="$HOME/${v#\~/}" ;; '$HOME') v="$HOME" ;; '$HOME/'*) v="$HOME/${v#\$HOME/}" ;; '${HOME}') v="$HOME" ;; '${HOME}/'*) v="$HOME/${v#\$\{HOME\}/}" ;; esac
+  case "$v" in /*) ;; *) return 1 ;; esac
+  case "$v" in *'$'*|*'`'*|*'\'*) return 1 ;; esac
+  while [ "${#v}" -gt 1 ] && [ "${v%/}" != "$v" ]; do v="${v%/}"; done
+  printf '%s\n' "$v"
+}
+aims_profile_value() {  # last plain AIMS_HOME assignment in a profile file
+  [ -f "$1" ] || return 1
+  local raw; raw="$(sed -n -E 's/^[[:space:]]*(export[[:space:]]+)?AIMS_HOME=([^#;&|]*).*$/\2/p' "$1" 2>/dev/null | tail -n 1)"
+  raw="$(printf '%s' "$raw" | sed -E 's/[[:space:]]+$//; s/^"(.*)"$/\1/; s/^'"'"'(.*)'"'"'$/\1/')"
+  [ -n "$raw" ] || return 1
+  aims_expand_path "$raw"
+}
+aims_home_candidates() {  # prints "source<TAB>path" in resolution order (only sources that yield a value)
+  local f v
+  [ -n "${AIMS_HOME:-}" ] && printf 'env\t%s\n' "$AIMS_HOME"
+  f="$(aims_config_file)"
+  if [ -s "$f" ]; then v="$(head -n 1 "$f")"; v="$(aims_expand_path "$v" 2>/dev/null)" && printf 'config\t%s\n' "$v"; fi
+  while IFS= read -r f; do v="$(aims_profile_value "$f")" && printf 'profile:%s\t%s\n' "$f" "$v"; done <<EOF
+$(aims_profiles)
+EOF
+  [ -d "$HOME/.aims/.git" ] || [ -f "$HOME/.aims/.git" ] && printf 'default\t%s\n' "$HOME/.aims"
+  return 0
+}
+aims_home() {  # resolved data repo path (first candidate wins; ~/.aims when none)
+  local all first; all="$(aims_home_candidates)"; first="${all%%$'\n'*}"; first="${first#*$'\t'}"
+  printf '%s\n' "${first:-$HOME/.aims}"
+}
+aims_home_conflicts() {  # distinct non-env candidates; >1 line means the install target is ambiguous
+  aims_home_candidates | awk -F '\t' '$1 != "env" && !seen[$2]++ { print $2 }'
+}
+if [ "${BASH_SOURCE[0]}" = "$0" ]; then
+  set -euo pipefail
+  case "${1:-}" in
+    "") [ "$#" -eq 0 ] || { echo "usage: aims home [--explain]" >&2; exit 2; }; aims_home ;;
+    --explain)
+      [ "$#" -eq 1 ] || { echo "usage: aims home [--explain]" >&2; exit 2; }
+      echo "resolved: $(aims_home)"
+      aims_home_candidates | while IFS="$(printf '\t')" read -r src path; do
+        state=missing; [ -e "$path/.git" ] && state="git repo"
+        case "$src" in profile:*) state="$state, from ${src#profile:}"; src=profile ;; esac
+        printf '  %-8s %s (%s)\n' "$src" "$path" "$state"
+      done
+      [ "$(aims_home_conflicts | grep -c .)" -le 1 ] || echo "WARN: more than one data repo candidate; set AIMS_HOME or rerun aims install"
+      ;;
+    *) echo "usage: aims home [--explain]" >&2; exit 2 ;;
+  esac
+fi

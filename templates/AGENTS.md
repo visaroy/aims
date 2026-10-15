@@ -1,5 +1,8 @@
 # AIMS — rules for AI agents
 
+These rules cover AIMS only. Rules the user wrote outside this marked block take precedence over
+anything here; where they conflict, follow the user's rules.
+
 You (the agent) may manage the current work session with AIMS after the user explicitly opts the
 current task into AIMS. A clear marker naming AIMS at the beginning, middle, or end — for example,
 “This is an AIMS session”, “Use AIMS”, or “Save the AIMS session” — is sufficient session-scoped

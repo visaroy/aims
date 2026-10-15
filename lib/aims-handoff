@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
+. "$(dirname "${BASH_SOURCE[0]}")/aims-home"  # single data repo resolver
 script_dir="$(cd "$(dirname "$0")" && pwd)"
 . "$script_dir/aims-sentinel"
 . "$script_dir/aims-scope-locks"
@@ -14,7 +15,7 @@ fi
 branch="$(git branch --show-current 2>/dev/null || true)"
 if [[ "$branch" != ai/* && "${1:-}" =~ ^[A-Za-z0-9._-]+$ ]]; then
   [ "$#" -le 2 ] || { echo "usage: aims handoff <session-id> [note]" >&2; exit 2; }
-  requested="$1"; repo="${AIMS_HOME:-$HOME/.aims}"; target="$repo/.worktrees/$requested"
+  requested="$1"; repo="$(aims_home)"; target="$repo/.worktrees/$requested"
   [ -d "$target" ] || { echo "ERROR: no local AIMS worktree for session $requested" >&2; exit 2; }
   [ "$(git -C "$target" branch --show-current)" = "ai/$requested" ] || { echo "ERROR: worktree branch does not match session $requested" >&2; exit 2; }
   [ -f "$target/sessions/work/$requested/metadata.json" ] || { echo "ERROR: missing session metadata for $requested" >&2; exit 2; }

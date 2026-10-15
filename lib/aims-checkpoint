@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
-repo="${AIMS_HOME:-$HOME/.aims}"
+. "$(dirname "${BASH_SOURCE[0]}")/aims-home"  # single data repo resolver
+repo="$(aims_home)"
 sid="${1:-}"
 lib="${AIMS_ROOT:-$(cd "$(dirname "$0")/.." && pwd)}/lib"
 . "$lib/aims-lifecycle-guard"

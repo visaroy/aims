@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
+. "$(dirname "${BASH_SOURCE[0]}")/aims-home"  # single data repo resolver
 if [ -n "${AIMS_ROOT:-}" ]; then AIMS_LIB="$AIMS_ROOT/lib"; else AIMS_LIB="$(cd "$(dirname "$0")" && pwd)"; fi
 . "$AIMS_LIB/aims-sentinel"
 . "$AIMS_LIB/aims-lifecycle-guard"
@@ -9,7 +10,7 @@ arg="${1:-}"                                                                    
 [ -n "$arg" ] || { echo "usage: aims adopt <session-id> [--remote]" >&2; exit 2; }
 [ "$#" -eq 1 ] || { [ "$#" -eq 2 ] && [ "$2" = "--remote" ]; } || { echo "usage: aims adopt <session-id> [--remote]" >&2; exit 2; }
 remote=0; [ "${2:-}" = "--remote" ] && remote=1                                       # --remote = report only, do NOT create a local worktree (work stays on the session host)
-repo="${AIMS_HOME:-$HOME/.aims}"
+repo="$(aims_home)"
 branch="$arg"; [[ "$branch" == ai/* ]] || branch="ai/$arg"
 sid="${branch#ai/}"
 [[ "$sid" =~ ^[A-Za-z0-9._-]+$ ]] || { echo "ERROR: unsafe session id: $sid" >&2; exit 2; }

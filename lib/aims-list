@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
-repo="${AIMS_HOME:-$HOME/.aims}"; now="$(date -u +%s)"; handoff=0; stale=0; closed=0; project=""
+. "$(dirname "${BASH_SOURCE[0]}")/aims-home"  # single data repo resolver
+repo="$(aims_home)"; now="$(date -u +%s)"; handoff=0; stale=0; closed=0; project=""
 while [ $# -gt 0 ]; do
   case "$1" in
     --handoff) handoff=1; shift;;
