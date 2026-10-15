@@ -3,7 +3,7 @@
 **AI Multi-agent Sessions** — git-native session management for AI coding agents,
 across many machines and many agents.
 
-![Version](https://img.shields.io/badge/Version-v3.0.0-blue) ![Last Update](https://img.shields.io/badge/Update-2026--10--02-orange) [![AIMS CI](https://github.com/visaroy/aims/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/visaroy/aims/actions/workflows/ci.yml) ![status](https://img.shields.io/badge/status-stable-blue) ![license](https://img.shields.io/badge/license-MIT-blue) ![shell](https://img.shields.io/badge/shell-bash-121011)
+![Version](https://img.shields.io/badge/Version-v3.1.0-blue) ![Last Update](https://img.shields.io/badge/Update-2026--10--15-orange) [![AIMS CI](https://github.com/visaroy/aims/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/visaroy/aims/actions/workflows/ci.yml) ![status](https://img.shields.io/badge/status-stable-blue) ![license](https://img.shields.io/badge/license-MIT-blue) ![shell](https://img.shields.io/badge/shell-bash-121011)
 
 AIMS turns each unit of AI work into a **git branch in an isolated worktree**. Sessions can be
 **handed off** between machines and **adopted** by any agent — because the source of truth is a
@@ -36,6 +36,8 @@ not to later tasks, and must not be inferred from a general request to work, a m
 current task, or a new conversation.
 
 ## Stable release
+
+`v3.1.0` replaces `bootstrap.sh`, `aims init`, and the `wire-agents` prompt with one zero-configuration installer: `install.sh` / `aims install` reuses your existing data repo, backs up every file it modifies outside all repositories, and is reverted by `aims uninstall`. It is backward compatible; see [Upgrading](docs/UPGRADING.md).
 
 `v3.0.0` makes detected valid scope overlaps advisory: `aims start` warns and proceeds after its serialized admission checks, while malformed scopes and Git/origin/lease failures remain blocking. `dashboard:` is a new exact-match scope kind, and handed-off `aims adopt` reports overlap diagnostics without treating them as a blocker; local adoption still requires `status=handoff`. See the [CLI compatibility policy](docs/COMPATIBILITY.md) and the [acceptance test](docs/TESTING.md).
 
@@ -156,12 +158,14 @@ steps) is idempotent: running it again refreshes everything it owns. In order, i
 1. **Checks for conflicts before changing anything** — required tools, writable paths, unresolved Git
    conflicts in target files, and data repo ambiguity. Only a real blocker stops it, with a message
    naming the blocker and the fix; anything else is installed and reported.
-2. **Installs the engine** to `~/aims` and links the `aims` command into `~/.local/bin`.
-3. **Resolves the data repo — reuse first.** It uses the first existing one from `$AIMS_HOME`,
-   `~/.config/aims/home`, an `AIMS_HOME` export in your shell profile, or `~/.aims`; only when none
-   exists does it create `~/.aims`. Two different existing candidates are a blocker (rerun with
-   `AIMS_HOME=<path>`). The chosen path is recorded in `~/.config/aims/home`, so every agent and shell
-   finds it without profile edits.
+2. **Installs the engine** to `~/aims` (`install.sh` only) and links the `aims` command into
+   `~/.local/bin`.
+3. **Resolves the data repo — reuse first.** `$AIMS_HOME` wins when set, then the path recorded in
+   `~/.config/aims/home`; otherwise it reuses the single candidate from an `AIMS_HOME` export in your
+   shell profile or an existing `~/.aims`, and creates `~/.aims` only when there is none. Two different
+   candidates are a blocker (rerun with `AIMS_HOME=<path>`). The chosen path is recorded in
+   `~/.config/aims/home`, so every agent and shell finds it without profile edits; `aims home --explain`
+   shows where it came from.
 4. **Installs the `pre-push` guard** in the data repo.
 5. **Wires detected agents** (`~/AGENTS.md`, `~/.codex/AGENTS.md`, `~/.claude/CLAUDE.md`,
    `~/.gemini/GEMINI.md`, following symlinks to the real file): it adds or refreshes one marked AIMS
@@ -172,8 +176,9 @@ steps) is idempotent: running it again refreshes everything it owns. In order, i
    commit (integrate them through a branch and pull request; `main` is guarded), backups, and
    `aims doctor`.
 
-`aims uninstall` removes the marked blocks, the guard, the command link, and the recorded data repo
-path, restoring from the backups where needed. It never deletes your data repo.
+`aims uninstall` removes the marked blocks (only the block, so your own edits stay), the guard, the
+command link, and the recorded data repo path. It never deletes your data repo.
+`aims wire-agents --check` shows what the agent step would change without writing anything.
 `install.sh --fresh` starts over with a new data repo: the old one is moved aside to
 `<path>.aims-replaced-<UTC timestamp>`, never deleted, and the installer refuses while it still has
 uncommitted changes or commits that are not on its `origin`.
@@ -259,9 +264,9 @@ aims publish <session-id>                        # merge to main, register, done
 | `aims artifacts <id>` | Session dir in the shared store (`AIMS_ARTIFACTS`) |
 | `aims install [--fresh]` | Install or refresh the engine link, data repo, guard, and agent rules (same as `install.sh`) |
 | `aims uninstall` | Revert the installation; the data repo is kept |
-| `aims home` | Print the resolved data repo path |
+| `aims home [--explain]` | Print the resolved data repo path (and its source) |
 | `aims init [dir]` | Deprecated in 3.1: create or reuse a data repo only; use `aims install` |
-| `aims wire-agents` | Add or refresh the marked AIMS rules block in detected agent config files |
+| `aims wire-agents [--check]` | Add or refresh the marked AIMS rules block in detected agent config files |
 | `aims install-hooks` | Reinstall the data repo pre-push guard |
 | `aims doctor` | Health-check engine + data repo |
 | `aims preflight [mode]` | Report whether the current Git repo is ready for an AIMS session |

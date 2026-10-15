@@ -1,6 +1,6 @@
 # Test AIMS in under 3 minutes
 
-**Last updated**: 2026-07-30
+**Last updated**: 2026-10-15
 
 This page separates the automated acceptance test that an agent runs from the decisions and observations that belong to a human tester. The automated test simulates two machines and two agents using disposable local directories. It exercises the complete AIMS lifecycle without reading or changing the tester's normal `HOME`, Git configuration, `~/.aims`, agent configuration files, or a real remote repository.
 
@@ -24,6 +24,25 @@ scope rejection, handed-off adoption diagnostics, and non-handoff adoption rejec
 
 ```bash
 bash tests/advisory-overlap-policy.sh
+```
+
+The installer suite (3.1.0) runs each scenario on a disposable `HOME` with fake agent executables and
+local repositories only — no network:
+
+| Test | Verifies |
+|---|---|
+| `tests/install-fresh-home.sh` | Empty `HOME`: creates and records `~/.aims`, guard, command link, agent blocks; a second run changes no file. |
+| `tests/install-reuse-data-repo.sh` | Reuse from `$AIMS_HOME`, `~/.config/aims/home`, a profile export, and `~/.aims`; two candidates block without any change; choosing with `AIMS_HOME` is recorded. |
+| `tests/install-preflight-blocker.sh` | Conflict markers, a malformed block, a non-repo data path, a foreign hook, a foreign command file, and a read-only target each stop the run before any change. |
+| `tests/install-tracked-target.sh` | A symlinked, Git-tracked agent file is wired, reported for a pull request, and backed up outside its repo. |
+| `tests/install-duplicate-policy.sh` | User-written AIMS text is kept and reported as a possible duplicate; the block is still added. |
+| `tests/install-fresh-flag.sh` | `--fresh` refuses with no origin, dirty, or unpushed work, and otherwise moves the old repo aside. |
+| `tests/uninstall.sh` | Install then uninstall restores every agent file byte for byte, keeps the data repo, and is idempotent. |
+| `tests/install-update.sh` | `install.sh` restores the engine to `origin/main`, refuses a non-`main` branch, runs `aims install`, and works from a pipe. |
+| `tests/bootstrap-shim.sh`, `tests/init-deprecated.sh` | The deprecated entry points keep working. |
+
+```bash
+for t in tests/install-*.sh tests/uninstall.sh tests/bootstrap-shim.sh tests/init-deprecated.sh; do bash "$t"; done
 ```
 
 ## For agents: isolated acceptance test
