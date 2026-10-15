@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
+. "$(dirname "${BASH_SOURCE[0]}")/aims-home"  # single data repo resolver
 project="${1:-}"; topic="${2:-}"; shift 2 || true
 [ -n "$project" ] && [ -n "$topic" ] || { echo "usage: aims start <project> <topic> [agent] --scope host:x,repo:y,... [--continues-from session-id] [--parent-session session-id]" >&2; exit 2; }
 agent="opencode"; scope_csv=""; continues_from=""; parent_session=""
@@ -14,7 +15,7 @@ while [ $# -gt 0 ]; do
 done
 [ -z "$continues_from" ] || [[ "$continues_from" =~ ^[A-Za-z0-9._-]+$ ]] || { echo "ERROR: unsafe predecessor session id: $continues_from" >&2; exit 2; }
 [ -z "$parent_session" ] || [[ "$parent_session" =~ ^[A-Za-z0-9._-]+$ ]] || { echo "ERROR: unsafe parent session id: $parent_session" >&2; exit 2; }
-repo="${AIMS_HOME:-$HOME/.aims}"
+repo="$(aims_home)"
 git -C "$repo" remote get-url origin >/dev/null 2>&1 || { echo "ERROR: data repo $repo has no 'origin' remote. AIMS syncs sessions through origin; add one first:" >&2; echo "  git -C \"$repo\" remote add origin <url> && git -C \"$repo\" push -u origin main" >&2; exit 1; }
 if [ -n "${AIMS_ROOT:-}" ]; then AIMS_LIB="$AIMS_ROOT/lib"; else AIMS_LIB="$(cd "$(dirname "$0")" && pwd)"; fi   # engine = directory of this script
 . "$AIMS_LIB/aims-sentinel"

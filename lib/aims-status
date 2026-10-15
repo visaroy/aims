@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
+. "$(dirname "${BASH_SOURCE[0]}")/aims-home"  # single data repo resolver
 arg="${1:-}"; [ -n "$arg" ] && [ "$#" -eq 1 ] || { echo "usage: aims status <session-id>" >&2; exit 2; }
 sid="${arg#ai/}"; [[ "$sid" =~ ^[A-Za-z0-9._-]+$ ]] || { echo "ERROR: unsafe session id: $sid" >&2; exit 2; }
-repo="${AIMS_HOME:-$HOME/.aims}"; branch="ai/$sid"
+repo="$(aims_home)"; branch="ai/$sid"
 git -C "$repo" fetch -q origin main
 if git -C "$repo" ls-remote --exit-code --heads origin "refs/heads/$branch" >/dev/null 2>&1; then
   meta="$(git -C "$repo" show "origin/$branch:sessions/work/$sid/metadata.json" 2>/dev/null || echo '{}')"

@@ -1,0 +1,65 @@
+#!/usr/bin/env bash
+set -euo pipefail
+# Internal: byte-preserving operations on the marked AIMS block in one agent config file.
+#   check <file>                  exit 1 with a reason for Git conflict markers or a malformed block
+#   plan|apply <file> <rules> <v> print added|refreshed|unchanged (apply writes the file)
+#   remove <file>                 print removed|absent (exit 1 on a malformed block)
+#   duplicates <file>             print line numbers outside the block that mention AIMS
+#   sha <file>                    sha256 of the file, or - when absent
+exec python3 - "$@" <<'PY'
+import hashlib, os, re, sys
+BEGIN = "<!-- >>> AIMS agent rules >>> -->"
+END = "<!-- <<< AIMS agent rules <<< -->"
+def read(path):
+    if not os.path.lexists(path): return None
+    with open(path, "rb") as fh: return fh.read().decode("utf-8", "surrogateescape")
+def write(path, text):
+    with open(path, "wb") as fh: fh.write(text.encode("utf-8", "surrogateescape"))
+def span(text):
+    b, e = text.count(BEGIN), text.count(END)
+    if b == 0 and e == 0: return None
+    if b != 1 or e != 1 or text.index(END) < text.index(BEGIN):
+        raise ValueError("malformed AIMS block (%d begin / %d end markers)" % (b, e))
+    return text.index(BEGIN), text.index(END) + len(END)
+def render(rules, version):
+    with open(rules, "rb") as fh: body = fh.read().decode("utf-8", "surrogateescape")
+    if not body.endswith("\n"): body += "\n"
+    head = "<!-- Managed by AIMS %s: only AIMS rules belong in this block; remove it with `aims uninstall`. -->\n" % version
+    return BEGIN + "\n" + head + body + END
+def planned(path, rules, version):
+    text = read(path) or ""
+    block, s = render(rules, version), span(text)
+    if s: new, state = text[:s[0]] + block + text[s[1]:], "refreshed"
+    elif text: new, state = text + "\n" + block + "\n", "added"
+    else: new, state = block + "\n", "added"
+    return (new, "unchanged") if new == text else (new, state)
+cmd, args = sys.argv[1], sys.argv[2:]
+try:
+    if cmd == "check":
+        text = read(args[0])
+        if text is None: sys.exit(0)
+        if re.search(r"^(<<<<<<<|>>>>>>>)( |$)", text, re.M): print("unresolved Git conflict markers"); sys.exit(1)
+        span(text)
+    elif cmd in ("plan", "apply"):
+        new, state = planned(*args[:3])
+        if cmd == "apply" and state != "unchanged": write(args[0], new)
+        print(state)
+    elif cmd == "remove":
+        text = read(args[0]); s = span(text) if text is not None else None
+        if not s: print("absent"); sys.exit(0)
+        i, j = s
+        if i > 0 and text[i - 1] == "\n": i -= 1  # the separator added in front of an appended block
+        if j < len(text) and text[j] == "\n": j += 1  # the line end added after the block
+        write(args[0], text[:i] + text[j:]); print("removed")
+    elif cmd == "duplicates":
+        text = read(args[0]) or ""; s = span(text)
+        outside = text if not s else text[:s[0]] + "\n" * text[s[0]:s[1]].count("\n") + text[s[1]:]
+        print(" ".join(str(n) for n, line in enumerate(outside.split("\n"), 1) if re.search(r"\bAIMS\b", line)))
+    elif cmd == "sha":
+        text = read(args[0])
+        print("-" if text is None else hashlib.sha256(text.encode("utf-8", "surrogateescape")).hexdigest())
+    else:
+        print("usage: aims-agent-block check|plan|apply|remove|duplicates|sha <file> ...", file=sys.stderr); sys.exit(2)
+except ValueError as exc:
+    print(exc); sys.exit(1)
+PY

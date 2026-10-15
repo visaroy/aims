@@ -11,7 +11,7 @@ export AIMS_ROOT
 cmd="${1:-help}"; [ $# -gt 0 ] && shift || true
 case "$cmd" in
   start|save|handoff|handoff-all|checkpoint|adopt|publish|list|brief|rebase|status|continue|conflicts|abandon|heartbeat|delegate-exec) exec "$AIMS_ROOT/lib/aims-$cmd" "$@" ;;
-  init)      exec "$AIMS_ROOT/lib/aims-init" "$@" ;;
+  init|install|uninstall|home) exec "$AIMS_ROOT/lib/aims-$cmd" "$@" ;;
   artifacts) exec "$AIMS_ROOT/lib/aims-artifacts" "$@" ;;
   wire-agents) exec "$AIMS_ROOT/lib/aims-wire-agents" "$@" ;;
   install-hooks) exec "$AIMS_ROOT/lib/aims-install-hooks" "$@" ;;
@@ -28,7 +28,10 @@ Git-native session management for AI agents across machines.
 
 usage: aims <command> [args]
 
-  init [dir]            Scaffold a data repo (default: $AIMS_HOME or ~/.aims)
+  install [--fresh]     Install or refresh: command link, data repo (reused), guard, agent rules
+  uninstall             Revert the installation; the data repo is kept
+  home [--explain]      Print the resolved data repo path (and where it came from)
+  init [dir]            Deprecated: create or reuse a data repo only (use install)
   start <proj> <topic> [agent] --scope <csv> [--continues-from <id>] [--parent-session <id>]
                         Start a session (branch + worktree)
   save                  Checkpoint: commit whole worktree + push (run in worktree)
@@ -55,14 +58,14 @@ usage: aims <command> [args]
                         List active remote sessions or published session records
   artifacts <id>        Print/create the session dir in the shared store (AIMS_ARTIFACTS)
   doctor                Health-check the install and data repo
-  wire-agents           Teach installed agents to understand AIMS (writes their rule files)
-  install-hooks         (Re)install the pre-push guard into the data repo (init does this too)
+  wire-agents [--check] Add or refresh the marked AIMS rules block in detected agent files
+  install-hooks         (Re)install the pre-push guard into the data repo (install does this too)
   preflight [mode]      Report whether the current Git repo can start an AIMS session
   version | -v | --version       Print version
   help | -h | --help             Print this help
 
 Docs: docs/AIMS.md · docs/ARCHITECTURE.md · docs/COMMANDS.md
-Env:  AIMS_HOME (data repo), AIMS_SESSION_ID (delegate guard), AIMS_DELEGATE_ID (delegate-exec), AIMS_GIT_NAME, AIMS_GIT_EMAIL, AIMS_ARTIFACTS (shared store)
+Env:  AIMS_HOME (data repo; else ~/.config/aims/home, a profile export, ~/.aims), AIMS_SESSION_ID (delegate guard), AIMS_DELEGATE_ID (delegate-exec), AIMS_GIT_NAME, AIMS_GIT_EMAIL, AIMS_ARTIFACTS (shared store)
 USAGE
     ;;
   *) echo "aims: unknown command '$cmd' (try 'aims help')" >&2; exit 2 ;;

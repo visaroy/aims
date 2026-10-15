@@ -1,65 +1,68 @@
 #!/usr/bin/env bash
 set -euo pipefail
-# Teach the AI agents installed on THIS machine to understand AIMS by writing an AIMS rules
-# block into their config files. Detects which agents are present, proposes the exact files it
-# will change, backs up each original once, and wires only detected agents. Idempotent: each file
-# gets one marker-delimited block; re-running refreshes it in place (no second backup).
-# Skip the confirmation prompt with AIMS_YES=1 (bootstrap sets this after its own consent).
-[ "$#" -eq 0 ] || { echo "usage: aims wire-agents" >&2; exit 2; }
-root="${AIMS_ROOT:-$(cd "$(dirname "$0")/.." && pwd)}"
-rules="$root/templates/AGENTS.md"
+# Teach the AI agents installed on THIS machine to understand AIMS: add or refresh one marked block of
+# AIMS-only rules in each detected agent's real config file (symlinks resolved, deduplicated). Never
+# prompts. All targets are checked before the first write; a blocker (unresolved Git conflict markers,
+# a malformed block, an unwritable file) changes nothing. Each modified file is backed up under
+# ~/.local/state/aims/backups/<UTC timestamp>/ with manifest.tsv. Git-tracked targets are written and
+# reported so they can be committed through a branch and pull request; user-written AIMS text outside
+# the block is reported as a possible duplicate. `--check` reports the plan without writing.
+# AIMS_YES is accepted and ignored (3.0 compatibility).
+lib="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"; root="$(cd "$lib/.." && pwd)"
+. "$lib/aims-home"; . "$lib/aims-agent-targets"
+check=0
+case "$#:${1:-}" in 0:) ;; 1:--check) check=1 ;; *) echo "usage: aims wire-agents [--check]" >&2; exit 2 ;; esac
+rules="$root/templates/AGENTS.md"; version="$(grep -m1 . "$root/VERSION" 2>/dev/null || echo dev)"
 [ -f "$rules" ] || { echo "ERROR: rules template not found: $rules" >&2; exit 1; }
-begin="<!-- >>> AIMS agent rules >>> -->"; end="<!-- <<< AIMS agent rules <<< -->"
-realpath_of() { python3 -c 'import os,sys; print(os.path.realpath(sys.argv[1]))' "$1"; }  # portable; py3 is a dep
-
-detected=""; candidates=""  # space-lists; bash 3.2 has no assoc arrays
-add_agent() { detected="$detected $1"; }
-add_file()  { candidates="$candidates $1"; }
-command -v claude   >/dev/null 2>&1 && { add_agent claude;   add_file "$HOME/.claude/CLAUDE.md"; }
-command -v gemini   >/dev/null 2>&1 && { add_agent gemini;   add_file "$HOME/.gemini/GEMINI.md"; }
-command -v codex    >/dev/null 2>&1 && { add_agent codex;    add_file "$HOME/.codex/AGENTS.md"; add_file "$HOME/AGENTS.md"; }
-command -v opencode >/dev/null 2>&1 && { add_agent opencode; add_file "$HOME/AGENTS.md"; }
-[ -n "$detected" ] || { echo "No supported AI agent detected (claude/codex/opencode/gemini) — nothing to wire."; exit 0; }
-
-targets=""; seen=""  # dedupe by realpath so symlinked dotfiles (many point at one shared file) are wired once
-for f in $candidates; do
-  key="$(realpath_of "$f")"
-  case " $seen " in *" $key "*) continue;; esac
-  seen="$seen $key"; targets="$targets $key"
-done
-
-echo "Detected agents:$detected"
-echo "Will write the AIMS rules block into (backed up first):"
-for t in $targets; do echo "  $t"; done
-if [ "${AIMS_YES:-0}" != 1 ]; then
-  if ( : </dev/tty ) 2>/dev/null; then   # a real terminal is reachable
-    printf 'Proceed? [y/N] ' > /dev/tty; read -r ans < /dev/tty || ans=
-    case "$ans" in y|Y|yes|YES) ;; *) echo "Aborted — no files changed."; exit 1;; esac
-  else
-    echo "Non-interactive: re-run with AIMS_YES=1 to proceed, or run 'aims wire-agents' in a terminal." >&2
-    exit 1
+report="${AIMS_WIRE_REPORT:-/dev/null}"  # aims install collects a machine-readable report here
+targets=""; origins=""; agents=""  # newline lists; bash 3.2 has no assoc arrays
+while IFS="$(printf '\t')" read -r agent file; do
+  [ -n "$file" ] || continue
+  case " $agents " in *" $agent "*) ;; *) agents="$agents $agent" ;; esac
+  real="$(aims_realpath "$file")"
+  printf '%s\n' "$targets" | grep -qxF "$real" && continue
+  targets="$targets$real"$'\n'; origins="$origins$file"$'\n'
+done <<LIST
+$(aims_agent_candidates)
+LIST
+[ -n "$targets" ] || { echo "No supported AI agent detected (claude/codex/opencode/gemini) — nothing to wire."; exit 0; }
+echo "Detected agents:$agents"
+blocked=0
+while IFS= read -r t; do
+  [ -n "$t" ] || continue
+  aims_writable_path "$t" || { echo "BLOCKER: cannot write $t — fix its permissions, then rerun"; blocked=1; continue; }
+  why="$("$lib/aims-agent-block" check "$t")" || { echo "BLOCKER: $t: $why — resolve it, then rerun"; blocked=1; }
+done <<LIST
+$targets
+LIST
+[ "$blocked" -eq 0 ] || { echo "No files changed."; exit 1; }
+backup="${AIMS_BACKUP_DIR:-$(aims_state_dir)/backups/$(date -u +%Y%m%dT%H%M%SZ)}"
+n=0; changed=0
+while IFS= read -r t; do
+  [ -n "$t" ] || continue
+  n=$((n + 1)); orig="$(printf '%s' "$origins" | sed -n "${n}p")"
+  state="$("$lib/aims-agent-block" plan "$t" "$rules" "$version")"
+  label="$t"; [ -L "$orig" ] && label="$t (via $orig)"
+  if [ "$state" != unchanged ] && [ "$check" -eq 0 ]; then
+    mkdir -p "$backup/files"; before="$("$lib/aims-agent-block" sha "$t")"
+    copy=-; if [ -e "$t" ]; then copy="files/$(printf '%03d' "$(($(wc -l 2>/dev/null < "$backup/manifest.tsv" || echo 0) + 1))")-$(basename "$t")"; cp -p "$t" "$backup/$copy"; fi
+    mkdir -p "$(dirname "$t")"; "$lib/aims-agent-block" apply "$t" "$rules" "$version" >/dev/null
+    printf '%s\t%s\t%s\t%s\t%s\n' "$orig" "$t" "$before" "$("$lib/aims-agent-block" sha "$t")" "$copy" >> "$backup/manifest.tsv"
+    changed=$((changed + 1)); printf 'changed\t%s\n' "$t" >> "$report"
   fi
-fi
-
-wire() {  # wire <realpath-file>
-  local f="$1"; mkdir -p "$(dirname "$f")"
-  if [ -s "$f" ] && ! grep -qF "$begin" "$f" 2>/dev/null; then  # back up the genuine pre-AIMS original, once
-    local bak; bak="$f.aims-backup-$(date +%Y%m%d%H%M%S)"; cp "$f" "$bak"; echo "  backup:  $bak"
+  verb="$state"; [ "$check" -eq 1 ] && [ "$state" != unchanged ] && verb="would be $state"
+  echo "  $verb: $label"
+  if repo="$(aims_git_tracked "$t")"; then
+    echo "    tracked by Git in $repo — commit it through a branch and pull request"; printf 'tracked\t%s\t%s\n' "$t" "$repo" >> "$report"
   fi
-  touch "$f"
-  if grep -qF "$begin" "$f" 2>/dev/null; then
-    python3 - "$f" "$begin" "$end" "$rules" <<'PY'   # replace existing block
-import sys
-f,b,e,r=sys.argv[1:5]
-s=open(f).read(); pre=s.split(b)[0]; post=s.split(e,1)[1] if e in s else ''
-block=b+"\n"+open(r).read()+e
-open(f,'w').write(pre.rstrip('\n')+"\n\n"+block+post)
-PY
-    echo "  refreshed: $f"
-  else
-    { printf '\n%s\n' "$begin"; cat "$rules"; printf '%s\n' "$end"; } >> "$f"; echo "  wired:   $f"
+  dup="$("$lib/aims-agent-block" duplicates "$t")"
+  if [ -n "$dup" ]; then
+    echo "    possible duplicate: your own AIMS text outside the block (lines: $(printf '%s' "$dup" | cut -d' ' -f1-5)); your rules take precedence"
+    printf 'duplicate\t%s\t%s\n' "$t" "$dup" >> "$report"
   fi
-}
-echo "Wiring AIMS agent rules:"
-for t in $targets; do wire "$t"; done
-echo "Done. Agents will now recognize AIMS intent (start/save/handoff/adopt/publish)."
+done <<LIST
+$targets
+LIST
+if [ "$check" -eq 1 ]; then echo "Check only — no files changed."
+elif [ "$changed" -gt 0 ]; then echo "Backups: $backup (manifest.tsv)"; printf 'backup\t%s\n' "$backup" >> "$report"
+else echo "Agent rules already current — no files changed."; fi

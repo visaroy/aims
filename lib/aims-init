@@ -1,46 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
-# Scaffolds a fresh AIMS data repo: the private, per-user repo that AIMS operates on.
-# The ENGINE (this project) stays separate and public; the DATA repo is yours.
+# Deprecated in 3.1 (kept for the 3.x contract): create or reuse a data repo only. Use `aims install`.
+. "$(dirname "${BASH_SOURCE[0]}")/aims-home"  # single data repo resolver
 [ "$#" -le 1 ] || { echo "usage: aims init [dir]" >&2; exit 2; }
-home="${1:-${AIMS_HOME:-$HOME/.aims}}"
-[ -e "$home/.git" ] && { echo "AIMS data repo already exists at $home"; exit 0; }
-mkdir -p "$home"/{sessions/work,.worktrees}
-cd "$home"
-git init -q -b main 2>/dev/null || { git init -q && git checkout -q -b main; }
-cat > .gitignore <<'GI'
-.worktrees/
-.locks/
-credentials/
-*.env
-.claude
-.gemini
-.warp
-*.dump
-*.bak
-GI
-cat > SESSIONS.md <<'SM'
-# Session Registry (append-only)
-
-| id | date | time | project | topic | path | notes | status |
-|----|------|------|---------|-------|------|-------|--------|
-SM
-cat > README.md <<'RM'
-# AIMS data repo
-
-Private per-user data for the AIMS session system. This repo holds your sessions,
-project state and registry. The AIMS engine (scripts) lives separately.
-
-- `sessions/work/<id>/` — per-session artifacts (owned by the running agent)
-- `SESSIONS.md` — append-only registry
-- `credentials/` — gitignored; never commit secrets
-RM
-mkdir -p credentials
-echo "# Secrets live here (gitignored). Never commit real values." > credentials/README.md
-git config user.name  >/dev/null 2>&1 || export GIT_AUTHOR_NAME="${AIMS_GIT_NAME:-AIMS Agent}"    GIT_COMMITTER_NAME="${AIMS_GIT_NAME:-AIMS Agent}"      # fresh machine may have no git identity (cwd is $home here)
-git config user.email >/dev/null 2>&1 || export GIT_AUTHOR_EMAIL="${AIMS_GIT_EMAIL:-aims@localhost}" GIT_COMMITTER_EMAIL="${AIMS_GIT_EMAIL:-aims@localhost}"  # fall back only when unset (real identity is kept)
-git add -A && git commit -q -m "🌱 init: AIMS data repo"
-init_root="$(cd "$(dirname "$0")/.." && pwd)"   # engine root, to locate hooks/
-AIMS_HOME="$home" "$init_root/lib/aims-install-hooks" >/dev/null 2>&1 && echo "   pre-push guard installed (direct push to main blocked; integrate via aims publish)" || echo "   WARN: pre-push guard not installed"
-echo "✅ AIMS data repo ready at $home"
-echo "   Set AIMS_HOME=$home and add a remote:  git -C $home remote add origin <url>"
+echo "NOTE: 'aims init' is deprecated since 3.1.0; 'aims install' sets up the data repo, guard, and agent rules." >&2
+home="${1:-$(aims_home)}"
+"$(dirname "${BASH_SOURCE[0]}")/aims-scaffold-data" "$home"
+[ "$home" = "$(aims_home)" ] || echo "   Not the resolved data repo; to use it run: AIMS_HOME=$home aims install" >&2
+echo "   Add a remote so sessions sync:  git -C $home remote add origin <url>" >&2

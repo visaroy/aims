@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
+. "$(dirname "${BASH_SOURCE[0]}")/aims-home"  # single data repo resolver
 requested=""; context_session=""
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -10,7 +11,7 @@ while [ $# -gt 0 ]; do
 done
 [ -n "$requested" ] || { echo "usage: aims conflicts --scope <csv> [--session <session-id>]" >&2; exit 2; }
 [ -z "$context_session" ] || [[ "$context_session" =~ ^[A-Za-z0-9._-]+$ ]] || { echo "ERROR: unsafe context session id: $context_session" >&2; exit 2; }
-repo="${AIMS_HOME:-$HOME/.aims}"; git -C "$repo" fetch -q origin main '+refs/heads/ai/*:refs/remotes/origin/ai/*' --prune || { echo 'ERROR: cannot refresh active sessions; refusing conflict check.' >&2; exit 1; }
+repo="$(aims_home)"; git -C "$repo" fetch -q origin main '+refs/heads/ai/*:refs/remotes/origin/ai/*' --prune || { echo 'ERROR: cannot refresh active sessions; refusing conflict check.' >&2; exit 1; }
 if [ -n "${AIMS_ROOT:-}" ]; then AIMS_LIB="$AIMS_ROOT/lib"; else AIMS_LIB="$(cd "$(dirname "$0")" && pwd)"; fi
 . "$AIMS_LIB/aims-scope-locks"
 . "$AIMS_LIB/aims-observed-facts"

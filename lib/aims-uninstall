@@ -1,0 +1,46 @@
+#!/usr/bin/env bash
+set -euo pipefail
+# Reverse what aims install owns: the marked AIMS blocks in agent config files (only the block is
+# removed, so your own edits stay), the AIMS pre-push guard, the command link, and the recorded data
+# repo path. Never deletes the data repo or the engine checkout. Idempotent; every modified file is
+# backed up first, like an install.
+[ "$#" -eq 0 ] || { echo "usage: aims uninstall" >&2; exit 2; }
+lib="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"; root="$(cd "$lib/.." && pwd)"
+. "$lib/aims-home"; . "$lib/aims-agent-targets"
+config="$(aims_config_file)"; state="$(aims_state_dir)"; link="$HOME/.local/bin/aims"
+backup="$state/backups/$(date -u +%Y%m%dT%H%M%SZ)-uninstall"; failed=0; seen=""; repos=""; removed=0; kept="$(aims_home)"
+created_by_aims() { cat "$state"/backups/*/manifest.tsv 2>/dev/null | awk -F '\t' -v f="$1" '$2 == f && $3 == "-" { found = 1 } END { exit !found }'; }
+echo "Agent rules:"
+while IFS="$(printf '\t')" read -r _ file; do
+  [ -n "$file" ] && [ -e "$file" ] || continue
+  real="$(aims_realpath "$file")"; case " $seen " in *" $real "*) continue ;; esac; seen="$seen $real"
+  grep -qF -e '<!-- >>> AIMS agent rules >>> -->' -e '<!-- <<< AIMS agent rules <<< -->' "$real" || continue
+  mkdir -p "$backup/files"; copy="files/$(printf '%03d' "$(($(wc -l 2>/dev/null < "$backup/manifest.tsv" || echo 0) + 1))")-$(basename "$real")"
+  cp -p "$real" "$backup/$copy"; before="$("$lib/aims-agent-block" sha "$real")"
+  if ! out="$("$lib/aims-agent-block" remove "$real")"; then echo "  ERROR: $real: $out — remove the block by hand"; failed=1; continue; fi
+  if [ ! -s "$real" ] && created_by_aims "$real"; then rm -f "$real"; echo "  deleted (created by AIMS, now empty): $real"
+  else echo "  removed block: $real"; fi
+  removed=$((removed + 1))
+  printf '%s\t%s\t%s\t%s\t%s\n' "$file" "$real" "$before" "$("$lib/aims-agent-block" sha "$real")" "$copy" >> "$backup/manifest.tsv"
+  if repo="$(aims_git_tracked "$real" 2>/dev/null)"; then echo "    tracked by Git in $repo — commit the removal through a branch and pull request"; fi
+done <<LIST
+$(aims_agent_candidates all)
+LIST
+[ "$removed" -gt 0 ] || echo "  no AIMS blocks found"
+echo "Guard:"
+while IFS="$(printf '\t')" read -r _ repo; do
+  [ -n "$repo" ] || continue; case " $repos " in *" $repo "*) continue ;; esac; repos="$repos $repo"
+  common="$(git -C "$repo" rev-parse --git-common-dir 2>/dev/null)" || continue
+  case "$common" in /*) ;; *) common="$repo/$common" ;; esac
+  if grep -q '^# AIMS guard' "$common/hooks/pre-push" 2>/dev/null; then rm -f "$common/hooks/pre-push"; echo "  removed: $common/hooks/pre-push"; fi
+done <<LIST
+$(aims_home_candidates)
+LIST
+echo "Command and recorded path:"
+target="$(readlink "$link" 2>/dev/null || true)"
+case "$target" in */bin/aims) rm -f "$link"; echo "  removed: $link" ;; *) echo "  no AIMS command link at $link" ;; esac
+if [ -e "$config" ]; then rm -f "$config"; rmdir "$(dirname "$config")" 2>/dev/null || true; echo "  removed: $config"; fi
+[ ! -d "$backup" ] || echo "Backups: $backup (manifest.tsv)"
+echo "Kept: the data repo ($kept) and the engine checkout ($root). Remove the engine with: rm -rf \"$root\""
+echo "AIMS_HOME exports in your shell profiles were never written by AIMS and are left as they are."
+[ "$failed" -eq 0 ] || { echo "ERROR: some blocks could not be removed (see above)" >&2; exit 1; }

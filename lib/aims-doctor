@@ -1,16 +1,37 @@
 #!/usr/bin/env bash
 set -uo pipefail
 [ "$#" -eq 0 ] || { echo "usage: aims doctor" >&2; exit 2; }
-home="${AIMS_HOME:-$HOME/.aims}"; fail=0
+lib="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"; root="$(cd "$lib/.." && pwd)"
+. "$lib/aims-home"; . "$lib/aims-agent-targets"
+home="$(aims_home)"; fail=0; config="$(aims_config_file)"
 ok(){ printf 'OK: %s\n' "$*"; }; err(){ printf 'ERROR: %s\n' "$*"; fail=1; }; warn(){ printf 'WARN: %s\n' "$*"; }
 command -v git >/dev/null && ok "git present" || err "git missing"
 command -v bash >/dev/null && ok "bash present" || err "bash missing"
 command -v python3 >/dev/null && ok "python3 present" || err "python3 missing (aims-publish/list need it)"
-[ -d "$home/.git" ] && ok "data repo $home" || err "no data repo at $home (run: aims init)"
+[ -d "$home/.git" ] || [ -f "$home/.git" ] && ok "data repo $home" || err "no data repo at $home (run: aims install)"
 [ -f "$home/SESSIONS.md" ] && ok "registry present" || warn "SESSIONS.md missing"
-if [ -d "$home/.git" ]; then
-  git -C "$home" remote get-url origin >/dev/null 2>&1 && ok "origin remote set" || warn "no origin remote — add one before starting sessions: git -C $home remote add origin <url>"
+recorded="$(head -n 1 "$config" 2>/dev/null)"
+if [ -z "$recorded" ]; then warn "data repo path not recorded in $config (run: aims install)"
+elif [ -n "${AIMS_HOME:-}" ] && [ "$AIMS_HOME" != "$recorded" ]; then warn "AIMS_HOME=$AIMS_HOME differs from the recorded data repo $recorded — agents without AIMS_HOME use the recorded one"
 fi
+[ "$(aims_home_conflicts | grep -c .)" -le 1 ] || warn "more than one data repo candidate (see: aims home --explain)"
+if [ -d "$home/.git" ] || [ -f "$home/.git" ]; then
+  git -C "$home" remote get-url origin >/dev/null 2>&1 && ok "origin remote set" || warn "no origin remote — add one before starting sessions: git -C $home remote add origin <url>"
+  common="$(git -C "$home" rev-parse --git-common-dir 2>/dev/null)"; case "$common" in /*) ;; *) common="$home/$common" ;; esac
+  if cmp -s "$root/hooks/pre-push" "$common/hooks/pre-push"; then ok "pre-push guard installed"
+  elif grep -q '^# AIMS guard' "$common/hooks/pre-push" 2>/dev/null; then warn "pre-push guard is outdated (run: aims install)"
+  else warn "pre-push guard missing (run: aims install)"; fi
+fi
+version="$(grep -m1 . "$root/VERSION" 2>/dev/null || echo dev)"; seen=""
+while IFS="$(printf '\t')" read -r _ file; do
+  [ -n "$file" ] && [ -e "$file" ] || continue
+  real="$(aims_realpath "$file")"; case " $seen " in *" $real "*) continue ;; esac; seen="$seen $real"
+  grep -qF '<!-- >>> AIMS agent rules >>> -->' "$real" || continue
+  if [ "$("$lib/aims-agent-block" plan "$real" "$root/templates/AGENTS.md" "$version" 2>/dev/null)" = unchanged ]; then ok "agent rules current: $real"
+  else warn "agent rules block outdated or malformed: $real (run: aims install)"; fi
+done <<LIST
+$(aims_agent_candidates all)
+LIST
 if [ -n "${AIMS_ARTIFACTS:-}" ]; then
   [ -d "$AIMS_ARTIFACTS" ] && ok "artifact store mounted: $AIMS_ARTIFACTS" || warn "AIMS_ARTIFACTS set but not mounted: $AIMS_ARTIFACTS"
 else

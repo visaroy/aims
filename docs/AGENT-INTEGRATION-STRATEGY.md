@@ -42,7 +42,8 @@ can provide controlled shortcuts without weakening the core guards.
 AIMS already supports Claude Code, Codex CLI, OpenCode, and Gemini CLI through the portable
 `aims wire-agents` mechanism. It writes one marker-delimited block from
 [`templates/AGENTS.md`](../templates/AGENTS.md) into the applicable instruction files. Re-running the
-command is idempotent and preserves user rules outside the markers.
+command is idempotent, never prompts, preserves user rules outside the markers, backs up every modified
+file outside all repositories, and is reverted by `aims uninstall`. `aims install` runs it.
 
 This remains the installation baseline until a native adapter is proven for an agent. It is important
 because it has no marketplace dependency and works for a user who has only one of the supported CLIs.

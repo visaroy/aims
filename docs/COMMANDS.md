@@ -1,6 +1,9 @@
 # AIMS commands
 
-All commands operate on `AIMS_HOME` (default `~/.aims`). Session ids are
+All commands operate on one data repo, resolved in this order: `$AIMS_HOME`, the path recorded by
+`aims install` in `~/.config/aims/home` (`$XDG_CONFIG_HOME/aims/home`), an `AIMS_HOME` export parsed —
+not executed — from a shell profile (`~/.zshenv`, `~/.zprofile`, `~/.zshrc`, `~/.bash_profile`,
+`~/.bashrc`, `~/.profile`), then `~/.aims`. `aims home` prints it. Session ids are
 `<UTC-timestamp>-<project>-<topic>-<agent>`.
 
 ## Explicit invocation policy
@@ -22,8 +25,64 @@ as a systemd timer, LaunchAgent, or CI job, are separate opt-in integrations. AI
 or start such a scheduler automatically, and any scheduled invocation must itself be explicitly
 authorized by the user.
 
-### `aims init [dir]`
-Scaffold a data repo: `sessions/work/`, `.worktrees/`, `SESSIONS.md`, gitignored `credentials/`.
+## Installation commands
+
+### `aims install [--fresh]`
+The zero-configuration installer; `install.sh` runs it after restoring the engine checkout. It never
+prompts and is idempotent: a second run changes nothing and reports `unchanged`.
+
+1. **Preflight** — every check runs before the first change, and a blocker exits `1` with
+   `Preflight found blockers — nothing was changed:` plus one line per blocker and its fix. Blockers:
+   a missing `git`/`bash`/`python3`; an unwritable `~/.local/bin`, `~/.config/aims`, or
+   `~/.local/state/aims`; a regular file at `~/.local/bin/aims`; more than one data repo candidate
+   (below); a data repo path that exists but is not a Git repository; a `pre-push` hook in the data
+   repo that is not the AIMS guard; an agent file with unresolved Git conflict markers, a malformed
+   AIMS block, or no write permission; for `--fresh`, unsaved work in the old data repo.
+2. **Command** — links `~/.local/bin/aims` to this engine's `bin/aims`.
+3. **Data repo** — `$AIMS_HOME`, when set, is used as given. Otherwise the recorded path wins. With
+   neither, the installer collects the candidates from shell profile exports and an existing `~/.aims`:
+   one candidate is reused (created if it does not exist yet), none means `~/.aims` is created, and two
+   different candidates are a blocker — rerun with `AIMS_HOME=<path>` to choose, and the choice is
+   recorded. The installer never changes data repo content; it only creates a missing repo with the
+   standard scaffold (`sessions/work/`, `.worktrees/`, `SESSIONS.md`, gitignored `credentials/`).
+4. **Recorded path** — writes the data repo path to `~/.config/aims/home`, so every agent and shell
+   finds it without editing shell profiles. AIMS never writes shell profiles.
+5. **Guard** — installs or refreshes the data repo `pre-push` hook (`aims install-hooks`).
+6. **Agent rules** — runs `aims wire-agents`.
+7. **Report** — the data repo used (`created` or `reused, from env|config|found`), agent files
+   changed, Git-tracked files that need a commit through a branch and pull request, possible
+   duplicate AIMS text, the backup directory, the undo command, a remote hint when the data repo has
+   no `origin`, and the full `aims doctor` output. The exit status is `1` if `aims doctor` reports an
+   error.
+
+`--fresh` replaces the data repo: the old one is moved to `<path>.aims-replaced-<UTC timestamp>` and a
+new one is created. Nothing is deleted. It refuses while the old repo or any of its worktrees has
+uncommitted changes, while a branch has commits that are not on `origin`, and — when there is no
+`origin` — unless the repo is still the untouched scaffold. Worktrees inside the moved repo keep their
+files; run `git worktree repair` inside the moved repo if you need them as worktrees again.
+
+### `aims uninstall`
+Reverses what `aims install` owns and keeps everything else. It removes only the marked AIMS block from
+each known agent file (`~/AGENTS.md`, `~/.codex/AGENTS.md`, `~/.claude/CLAUDE.md`,
+`~/.gemini/GEMINI.md`, symlinks followed), so your own edits stay; a file that AIMS created and that is
+empty afterwards is deleted, so an untouched file returns byte for byte. It also removes the AIMS
+`pre-push` guard (only a hook carrying the AIMS guard header) from every data repo candidate, the
+`~/.local/bin/aims` link, and `~/.config/aims/home`. Modified files are backed up first, as with an
+install. The data repo, the engine checkout, and any `AIMS_HOME` exports in shell profiles are kept;
+the output prints how to remove the engine. Running it twice is safe. A malformed block is reported and
+left for manual repair (exit status `1`).
+
+### `aims home [--explain]`
+Prints the resolved data repo path. `--explain` also lists every candidate with its source (`env`,
+`config`, `profile` with the file name, `default`) and whether it is a Git repository, and warns when
+there is more than one non-environment candidate.
+
+### `aims init [dir]` *(deprecated in 3.1, kept for the 3.x contract)*
+Creates a data repo scaffold with its guard at `[dir]` (default: the resolved data repo), or reports
+`AIMS data repo already exists at <dir>`. It prints a deprecation notice on stderr and does nothing
+else: it does not record the path, link the command, or wire agents. Use `aims install`.
+
+## Session commands
 
 ### `aims start <project> <topic> [agent] --scope host:x,repo:y,... [--continues-from <session-id>] [--parent-session <session-id>]`
 Creates branch `ai/` followed by the session id, plus a worktree, verifies the branch is absent,
@@ -181,10 +240,32 @@ pointers; the store keeps bytes.
 Lists active `ai/*` branches with project, handoff status, age, scope, parent lineage, and a STALE flag (>48h). `--closed` reads published metadata from `origin/main`; filters are read-only and may be combined.
 
 ### `aims doctor`
-Checks git/bash/python3, the data repo, registry, and origin remote.
+Checks git/bash/python3, the data repo, registry, and origin remote. It warns when the data repo path
+is not recorded, when `$AIMS_HOME` differs from the recorded path, when there is more than one data
+repo candidate, when the `pre-push` guard is missing or outdated, and when an agent rules block is
+outdated or malformed (run `aims install` to refresh).
 
-### `aims wire-agents`
-Detects supported local agents and installs the marker-delimited AIMS rules into their configuration files. It previews the files first and asks for confirmation unless `AIMS_YES=1`; backups are created once and repeated runs are idempotent.
+### `aims wire-agents [--check]`
+Adds or refreshes one marker-delimited block of AIMS-only rules from `templates/AGENTS.md` in the
+config file of each detected agent: `~/.claude/CLAUDE.md` (Claude Code), `~/.gemini/GEMINI.md` (Gemini
+CLI), `~/.codex/AGENTS.md` and `~/AGENTS.md` (Codex), `~/AGENTS.md` (OpenCode). Symlinks are followed
+to the real file, and each real file is wired once. It never prompts (`AIMS_YES` is accepted and
+ignored for compatibility).
+
+- All targets are checked first; unresolved Git conflict markers, a malformed block, or an unwritable
+  file stop it before any write.
+- Only the block is written. A file without a block gets it appended; a file with a block has exactly
+  that block replaced; an unchanged block is not rewritten.
+- The block states that the user's rules outside it take precedence.
+- A target tracked by Git is still written and is reported with its repository, to be committed through
+  a branch and pull request.
+- Lines outside the block that mention AIMS are reported as a possible duplicate, never removed.
+- Each modified file is copied to `~/.local/state/aims/backups/<UTC timestamp>/files/` (outside every
+  repository) and listed in `manifest.tsv`: original path, real path, SHA-256 before (`-` when the file
+  did not exist), SHA-256 after, backup copy.
+
+`--check` prints the same plan (`would be added`, `would be refreshed`, `unchanged`, tracked files,
+possible duplicates) without writing anything; it exits `1` if there is a blocker.
 
 ### `aims install-hooks`
 Installs or refreshes the data repo's pre-push guard. The guard blocks ordinary pushes to `main`; `aims publish` supplies the explicit integration context that permits the push. Work not opted into AIMS pushes a branch and merges it through a pull request; the guard's message names both paths.

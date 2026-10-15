@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
+. "$(dirname "${BASH_SOURCE[0]}")/aims-home"  # single data repo resolver
 # Phase 2: cheap liveness proof for an active session, without a full `aims
 # save` commit-diff. Bumps only the `observed.last_heartbeat` timestamp and
 # pushes that single-field change. Intended for a long-running task that
@@ -8,7 +9,7 @@ set -euo pipefail
 sid="${1:-}"
 [ -n "$sid" ] && [ "$#" -eq 1 ] || { echo "usage: aims heartbeat <session-id>" >&2; exit 2; }
 [[ "$sid" =~ ^[A-Za-z0-9._-]+$ ]] || { echo "ERROR: unsafe session id: $sid" >&2; exit 2; }
-repo="${AIMS_HOME:-$HOME/.aims}"; branch="ai/$sid"; wt="$repo/.worktrees/$sid"
+repo="$(aims_home)"; branch="ai/$sid"; wt="$repo/.worktrees/$sid"
 if [ -n "${AIMS_ROOT:-}" ]; then AIMS_LIB="$AIMS_ROOT/lib"; else AIMS_LIB="$(cd "$(dirname "$0")" && pwd)"; fi
 . "$AIMS_LIB/aims-heartbeat-facts"
 . "$AIMS_LIB/aims-lifecycle-guard"

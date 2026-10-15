@@ -12,7 +12,9 @@ session” explicitly authorizes final publication; session opt-in alone does no
 Mere discussion or documentation of AIMS, ordinary coding, or a new conversation is not consent. A
 task without a current-task marker should use native agent mechanisms instead. Engine installation,
 update, or repair remains a separate explicit permission, and an absent engine requires asking the
-user rather than inferring permission from session opt-in.
+user rather than inferring permission from session opt-in. An explicit request to install AIMS is
+consent to the complete installation described below — nothing more is done implicitly, and all of
+it is reversible.
 
 Externally configured schedulers, including systemd timers, LaunchAgents, and CI jobs, are separate
 opt-in integrations. AIMS does not configure or start them automatically, and any scheduled command
@@ -41,8 +43,31 @@ background workflow.
 
 ## Engine vs data
 - **Engine** (this repo, public): `bin/`, `lib/`, `hooks/`, `docs/`. No secrets, no private data.
-- **Data repo** (private, per-user): `AIMS_HOME` (default `~/.aims`) — sessions, `SESSIONS.md`,
-  project state, `credentials/` (gitignored). Created by `aims init`.
+- **Data repo** (private, per-user): sessions, `SESSIONS.md`, project state, `credentials/`
+  (gitignored). Exactly one per user, resolved by `lib/aims-home` for every command in this order:
+  `$AIMS_HOME`, `~/.config/aims/home`, an `AIMS_HOME` export parsed (never executed) from a shell
+  profile, `~/.aims`. Created only when none exists.
+
+## Installation model
+One entry point: `install.sh`, also reachable as `aims install`. Zero configuration, idempotent, safe
+to run by any agent. The installer itself decides — deterministically, not by agent judgement:
+
+| Step | Rule |
+|---|---|
+| Preflight | All conflict checks run before the first mutation. Only real blockers stop it: missing tools, unwritable paths, unresolved Git conflicts in a target file, or two different existing data repo candidates. |
+| Engine | `~/aims` is restored to the official `origin/main` (the only place the installer resets or cleans) and `aims` is linked into `~/.local/bin`. |
+| Data repo | `$AIMS_HOME` or the recorded path wins; otherwise reuse the single candidate from a profile export or `~/.aims`, and create `~/.aims` only when there is none. Record the path in `~/.config/aims/home`. Never touch its content. |
+| Guard | Install or refresh the data repo `pre-push` hook. |
+| Agent rules | Add or refresh one marked block with AIMS-only rules in each detected agent's real config file (symlinks resolved). User rules outside the block take precedence. Git-tracked targets are written and listed in the final report for integration via a branch and pull request. Existing user-written AIMS text is reported as a possible duplicate, not skipped. |
+| Backups | Every modified file is copied under `~/.local/state/aims/backups/<UTC timestamp>/` with a manifest, outside every repository. |
+| Report | Data repo used, files changed, tracked files needing a commit, backup location, `aims doctor`. |
+
+`aims uninstall` reverses everything the installer owns (marked blocks — only the block is removed, so
+user edits stay — guard, command link, recorded path) and keeps the data repo. `--fresh` replaces the data repo by moving the old one to
+`<path>.aims-replaced-<UTC timestamp>`; it refuses while the old repo has uncommitted changes or
+commits not on its `origin`. `aims init` remains in 3.x for compatibility (create or reuse a data repo
+only) and is deprecated in favour of `aims install`; `bootstrap.sh` remains as a shim that runs
+`install.sh`.
 
 ## Guards (why failures are loud)
 | Risk | Guard |
@@ -56,3 +81,5 @@ background workflow.
 | An unrelated orchestrator's subagent leaves an orphaned session | `aims start` stamps OS-observed hostname/ancestor-PID/heartbeat facts at creation; `aims conflicts` uses them only to *diagnose* a same-machine, dead-ancestor, zero-commit orphan and suggest `aims abandon --empty-only` — liveness is determined from the OS process start marker (not `kill -0`, which can return EPERM for a live protected process); never silently resolves the conflict |
 | An orchestrator wants a delegated subprocess to never accidentally start a competing session | `aims delegate-exec` pre-registers the delegation durably before the child starts and propagates `AIMS_SESSION_ID` via its own `exec`, so the existing lifecycle guard blocks the child's own lifecycle commands — opt-in, and not required for the baseline guarantee above |
 | Accidental push to main | `pre-push` hook blocks it |
+| A second, silent data repo | the installer reuses the resolved existing repo and stops on ambiguity; `--fresh` moves the old repo aside and refuses while it holds unpushed work |
+| Installer damaging user configuration | AIMS writes only inside its marked block, never prompts but stops on conflict markers or a malformed block before any write, backs up every file outside all repositories, and `aims uninstall` reverts it byte for byte |

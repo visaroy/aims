@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
-repo="${AIMS_HOME:-$HOME/.aims}"
+. "$(dirname "${BASH_SOURCE[0]}")/aims-home"  # single data repo resolver
+repo="$(aims_home)"
 confirm="${1:-}"
 [ "$#" -le 1 ] && { [ -z "$confirm" ] || [ "$confirm" = --yes ]; } || { echo "usage: aims handoff-all [--yes]" >&2; exit 2; }
 git -C "$repo" rev-parse --is-inside-work-tree >/dev/null 2>&1 || { echo "ERROR: AIMS data repo not found: $repo" >&2; exit 1; }

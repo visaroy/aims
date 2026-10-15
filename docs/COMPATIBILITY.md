@@ -1,10 +1,14 @@
 # AIMS CLI compatibility
 
+## `v3.1.0` additions
+
+`v3.1.0` is backward compatible with `v3.0.0`. It adds `install [--fresh]`, `uninstall`, `home [--explain]`, and `wire-agents --check`, and one data repo resolver used by every command: `$AIMS_HOME`, then `~/.config/aims/home`, then a shell profile export, then `~/.aims`. With `AIMS_HOME` set, behavior is unchanged. `init` is deprecated, not removed: it keeps its `3.x` behavior and output on stdout and adds a notice on stderr. `bootstrap.sh` is a deprecated shim that runs `install.sh`. `wire-agents` no longer prompts and no longer writes `*.aims-backup-*` files next to the originals; backups go to `~/.local/state/aims/backups/`. `AIMS_YES` is accepted and ignored. `install.sh` now ends by running `aims install`, so it also manages the data repo, guard, and agent rules.
+
 ## `v3.0.0` public contract
 
 AIMS `v3.0.0` is the stable `3.x` command-line contract. The supported public command names, documented arguments, environment variables, lifecycle order, and safety guarantees are the ones printed by `aims help` and described in [COMMANDS.md](COMMANDS.md). `start` and `continue` require non-empty scopes; `dashboard:` is a valid exact-match scope kind; admission remains atomically serialized (a cross-machine git-ref lease) and additionally protected by a machine-local admission lock. Valid detected overlaps now print an advisory warning and proceed, while malformed scopes, origin/Git/lease failures, and unverifiable checks remain blocking. Active local adoption requires a handoff, and handed-off adoption includes advisory overlap diagnostics. `aims start` stamps OS-observed hostname/ancestor-process/heartbeat facts used only for read-only stale-conflict diagnosis in `aims conflicts`. `aims conflicts` tolerates a pre-existing session with invalid or missing legacy scope metadata by warning about it and excluding it from the result, instead of failing the whole check.
 
-The contract covers these commands: `init`, `start`, `save`, `rebase`, `handoff`, `checkpoint`, `brief`, `adopt`, `publish`, `abandon`, `heartbeat`, `delegate-exec`, `list`, `artifacts`, `doctor`, `wire-agents`, `install-hooks`, `preflight`, `version`, and `help`.
+The contract covers these commands: `install`, `uninstall`, `home`, `init` (deprecated), `start`, `save`, `rebase`, `handoff`, `checkpoint`, `brief`, `adopt`, `publish`, `abandon`, `heartbeat`, `delegate-exec`, `list`, `artifacts`, `doctor`, `wire-agents`, `install-hooks`, `preflight`, `version`, and `help`.
 
 For the commands and options documented in `COMMANDS.md`, AIMS guarantees that:
 

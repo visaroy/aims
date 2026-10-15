@@ -1,0 +1,119 @@
+#!/usr/bin/env bash
+set -euo pipefail
+# Zero-configuration, idempotent AIMS installation (also run by install.sh after the engine restore).
+# 1) preflight: every conflict check runs before the first change; a blocker changes nothing.
+# 2) link the command, reuse (or create) the one data repo, record it, install the guard, wire agents.
+# 3) report what was used and changed, what is Git-tracked, possible duplicates, backups, aims doctor.
+# --fresh moves the old data repo aside (never deletes it) and refuses while it holds unsaved work.
+lib="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"; root="$(cd "$lib/.." && pwd)"
+. "$lib/aims-home"; . "$lib/aims-agent-targets"
+fresh=0
+case "$#:${1:-}" in 0:) ;; 1:--fresh) fresh=1 ;; *) echo "usage: aims install [--fresh]" >&2; exit 2 ;; esac
+version="$(grep -m1 . "$root/VERSION" 2>/dev/null || echo dev)"
+bindir="$HOME/.local/bin"; link="$bindir/aims"; config="$(aims_config_file)"; state="$(aims_state_dir)"
+ts="$(date -u +%Y%m%dT%H%M%SZ)"; blockers=""
+block() { blockers="$blockers  - $*"$'\n'; }
+say() { printf '\n== %s\n' "$*"; }
+hook_is_aims() { grep -q '^# AIMS guard' "$1" 2>/dev/null; }
+repo_hook() { local c; c="$(git -C "$1" rev-parse --git-common-dir)" || return 1; case "$c" in /*) ;; *) c="$1/$c" ;; esac; printf '%s\n' "$c/hooks/pre-push"; }
+unsaved_work() {  # print why a data repo must not be moved aside, if anything is unsaved
+  local repo="$1" wt
+  [ -z "$(git -C "$repo" status --porcelain 2>/dev/null)" ] || echo "uncommitted changes in $repo"
+  while IFS= read -r wt; do
+    [ -n "$wt" ] && [ "$wt" != "$repo" ] && [ -d "$wt" ] || continue
+    [ -z "$(git -C "$wt" status --porcelain 2>/dev/null)" ] || echo "uncommitted changes in worktree $wt"
+  done <<WT
+$(git -C "$repo" worktree list --porcelain 2>/dev/null | sed -n 's/^worktree //p')
+WT
+  if git -C "$repo" remote get-url origin >/dev/null 2>&1; then
+    [ -z "$(git -C "$repo" rev-list --branches --not --remotes=origin 2>/dev/null | sed -n 1p)" ] || echo "commits that are not on origin (push them first)"
+  elif [ "$(git -C "$repo" rev-list --all 2>/dev/null | grep -c .)" -gt 1 ] || [ "$(git -C "$repo" log -1 --format=%s 2>/dev/null)" != "🌱 init: AIMS data repo" ]; then
+    echo "no origin remote, so its commits exist only on this machine (add a remote and push first)"
+  fi
+}
+
+say "AIMS $version — preflight (nothing is changed until every check passes)"
+for tool in git bash python3; do command -v "$tool" >/dev/null 2>&1 || block "required tool missing: $tool — install it, then rerun"; done
+for dir in "$bindir" "$(dirname "$config")" "$state"; do aims_writable_path "$dir/.aims-probe" || block "cannot create or write $dir — fix its permissions, then rerun"; done
+if [ -e "$link" ] && [ ! -L "$link" ]; then block "$link exists and is not a symlink — move it away, then rerun"; fi
+src=""; target=""
+if [ -n "${AIMS_HOME:-}" ]; then src="env"; target="$AIMS_HOME"
+elif [ -s "$config" ]; then src=config; target="$(aims_home)"
+else
+  candidates="$(aims_home_conflicts)"
+  case "$(printf '%s' "$candidates" | grep -c .)" in
+    0) src=default; target="$HOME/.aims" ;;
+    1) src=found; target="$candidates" ;;
+    *) block "more than one AIMS data repo candidate — rerun with AIMS_HOME=<path> to choose one (the choice is recorded):"$'\n'"$(aims_home_candidates | sed 's/^/      /')" ;;
+  esac
+fi
+repo_state=create
+if [ -n "$target" ]; then
+  case "$target" in /*) ;; *) block "AIMS_HOME must be an absolute path: $target" ;; esac
+  if [ -e "$target/.git" ]; then repo_state=reuse
+  elif [ -e "$target" ] && { [ ! -d "$target" ] || [ -n "$(ls -A "$target" 2>/dev/null)" ]; }; then block "$target exists but is not a Git repository — move it away or choose another AIMS_HOME"
+  else aims_writable_path "$target/.aims-probe" || block "cannot create the data repo at $target"; fi
+  if [ "$repo_state" = reuse ] && [ "$fresh" -eq 1 ]; then
+    why="$(unsaved_work "$target")"
+    [ -z "$why" ] || block "--fresh refuses to move $target aside: $(printf '%s' "$why" | paste -sd ';' -)"
+    [ ! -e "$target.aims-replaced-$ts" ] || block "$target.aims-replaced-$ts already exists — rerun in a second"
+  fi
+  if [ "$repo_state" = reuse ] && [ "$fresh" -eq 0 ]; then
+    hook="$(repo_hook "$target")" || block "cannot read Git metadata of $target"
+    if [ -e "${hook:-}" ] && ! hook_is_aims "$hook"; then block "$hook is a pre-push hook not managed by AIMS — merge or move it, then rerun"; fi
+  fi
+fi
+if ! wire_check="$(AIMS_HOME="${target:-$HOME/.aims}" "$lib/aims-wire-agents" --check 2>&1)"; then
+  while IFS= read -r line; do case "$line" in BLOCKER:*) block "${line#BLOCKER: }" ;; esac; done <<EOF
+$wire_check
+EOF
+  printf '%s\n' "$wire_check" | grep -q '^BLOCKER:' || block "agent rules check failed: $wire_check"
+fi
+if [ -n "$blockers" ]; then
+  printf 'Preflight found blockers — nothing was changed:\n%s' "$blockers" >&2
+  exit 1
+fi
+echo "OK: no blockers"
+
+say "installing"
+backup="$state/backups/$ts"; report="$(mktemp "${TMPDIR:-/tmp}/aims-install.XXXXXX")"; trap 'rm -f "$report"' EXIT
+mkdir -p "$bindir" "$(dirname "$config")"
+if [ "$(readlink "$link" 2>/dev/null || true)" = "$root/bin/aims" ]; then echo "command:   $link (unchanged)"
+else ln -sfn "$root/bin/aims" "$link"; echo "command:   $link -> $root/bin/aims"; fi
+aside=""
+if [ "$repo_state" = reuse ] && [ "$fresh" -eq 1 ]; then
+  aside="$target.aims-replaced-$ts"; mv "$target" "$aside"; repo_state=create
+  echo "data repo: moved the old repo aside to $aside (nothing deleted)"
+fi
+if [ "$repo_state" = create ]; then
+  "$lib/aims-scaffold-data" "$target" >/dev/null; repo_used="$target (created)"
+else repo_used="$target (reused, from $src)"; fi
+echo "data repo: $repo_used"
+if [ "$(head -n 1 "$config" 2>/dev/null || true)" = "$target" ]; then echo "recorded:  $config (unchanged)"
+else printf '%s\n' "$target" > "$config"; echo "recorded:  $config"; fi
+hook="$(repo_hook "$target")"
+if cmp -s "$root/hooks/pre-push" "$hook"; then echo "guard:     $hook (unchanged)"
+else AIMS_HOME="$target" "$lib/aims-install-hooks" >/dev/null; echo "guard:     $hook"; fi
+echo "agents:"
+AIMS_HOME="$target" AIMS_WIRE_REPORT="$report" AIMS_BACKUP_DIR="$backup" "$lib/aims-wire-agents" | sed -n 's/^  /  /p'
+
+say "report"
+echo "Data repo:     $repo_used"; [ -z "$aside" ] || echo "Old data repo: $aside (kept; delete it yourself when no longer needed)"
+changed="$(grep '^changed	' "$report" | cut -f 2 || true)"
+if [ -n "$changed" ]; then echo "Agent files changed:"; printf '%s\n' "$changed" | sed 's/^/  - /'; else echo "Agent files changed: none"; fi
+tracked="$(grep '^tracked	' "$report" || true)"
+if [ -n "$tracked" ]; then
+  echo "Tracked by Git — commit these through a branch and pull request (main is guarded):"
+  printf '%s\n' "$tracked" | while IFS="$(printf '\t')" read -r _ f r; do echo "  - $f (repo $r)"; done
+fi
+dups="$(grep '^duplicate	' "$report" || true)"
+if [ -n "$dups" ]; then
+  echo "Possible duplicate AIMS text outside the block (your rules take precedence; remove duplicates if you wish):"
+  printf '%s\n' "$dups" | while IFS="$(printf '\t')" read -r _ f l; do echo "  - $f (lines $(printf '%s' "$l" | cut -d' ' -f1-5))"; done
+fi
+if [ -n "$changed" ]; then echo "Backups:       $backup (manifest.tsv)"; else echo "Backups:       none needed"; fi
+echo "Undo:          aims uninstall (keeps the data repo)"
+case ":$PATH:" in *":$bindir:"*) ;; *) echo "NOTE: add $bindir to PATH" ;; esac
+git -C "$target" remote get-url origin >/dev/null 2>&1 || echo "Next: give the data repo a private remote:  git -C \"$target\" remote add origin <url> && git -C \"$target\" push -u origin main"
+say "aims doctor"
+AIMS_HOME="$target" "$lib/aims-doctor" || { echo "ERROR: aims doctor reported issues" >&2; exit 1; }

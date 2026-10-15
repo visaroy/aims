@@ -14,8 +14,8 @@ to be shared — **rules** and **work** — on a substrate every agent already u
 
 ## 1. Consolidate rules — one source, every agent
 
-`aims wire-agents` (run automatically by the bootstrap, or manually anytime) writes an identical,
-marker-delimited AIMS block into each agent's config:
+`aims wire-agents` (run by every `aims install`, or manually anytime) writes an identical,
+marker-delimited AIMS block into each detected agent's config (symlinks followed to the real file):
 
 - `~/AGENTS.md` — opencode & Codex (project/home)
 - `~/.codex/AGENTS.md` — Codex global
@@ -23,7 +23,8 @@ marker-delimited AIMS block into each agent's config:
 - `~/.gemini/GEMINI.md` — Gemini CLI
 
 Every agent then maps the same natural-language intent to the same `aims` command. Re-running
-refreshes the block in place; it is idempotent.
+refreshes the block in place; it is idempotent. Each modified file is backed up under
+`~/.local/state/aims/backups/`, and `aims uninstall` removes the block again.
 
 ### Add your own rules alongside AIMS
 
@@ -36,7 +37,9 @@ The AIMS block is delimited by markers:
 ```
 
 Put **your** project rules **outside** those markers (above or below). `aims wire-agents` only touches
-what is between them, so your rules survive every refresh. This is how you consolidate *your own*
+what is between them, so your rules survive every refresh, and the block itself states that your rules
+take precedence. If your own text already mentions AIMS, the installer reports it as a possible
+duplicate and leaves it alone. This is how you consolidate *your own*
 conventions across all agents too: write them once per file (or share a snippet) outside the block.
 
 ## 2. Consolidate work — git is the shared memory

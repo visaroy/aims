@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
+. "$(dirname "${BASH_SOURCE[0]}")/aims-home"  # single data repo resolver
 [ "$#" -eq 0 ] || { echo "usage: aims install-hooks" >&2; exit 2; }
 if [ -n "${AIMS_ROOT:-}" ]; then AIMS_HOOKS="$AIMS_ROOT/hooks"; else AIMS_HOOKS="$(cd "$(dirname "$0")/../hooks" && pwd)"; fi
-repo="${AIMS_HOME:-$HOME/.aims}"
+repo="$(aims_home)"
 common="$(git -C "$repo" rev-parse --git-common-dir)"; case "$common" in /*) ;; *) common="$repo/$common" ;; esac  # --git-common-dir may be relative to repo; make absolute so install works from any cwd
 hooks_dir="$common/hooks"; mkdir -p "$hooks_dir"
 install -m 0755 "$AIMS_HOOKS/pre-push" "$hooks_dir/pre-push"
