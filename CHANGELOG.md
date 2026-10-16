@@ -1,6 +1,7 @@
 # Changelog
 
 ## Unreleased
+- Documentation: `docs/AIMS.md` is now in English, matching the rest of the project; the Polish original moved to `docs/i18n/pl/AIMS.md` as a translation.
 
 ## 3.1.0 — 2026-10-15
 - One zero-configuration installer. `install.sh` restores the engine and then runs the new `aims install [--fresh]`: a preflight that changes nothing on a blocker, the command link, the data repo (reused, never deleted), the recorded path in `~/.config/aims/home`, the `pre-push` guard, the agent rules, and a final report with `aims doctor`. It never prompts and a second run changes nothing. Piped from the web it clones `~/aims` after the MIT terms are accepted (`AIMS_ACCEPT=1`); run from a checkout it asks nothing.

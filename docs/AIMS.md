@@ -1,127 +1,133 @@
 # AIMS — AI Session Management System
 
-**Autor**: The AIMS authors · **Wersja**: 2026-07-17 · **Repo**: `<your-data-repo-url>`
+**Author**: The AIMS authors · **Version**: 2026-07-17 · **Repo**: `<your-data-repo-url>`
 
-Kanoniczna dokumentacja AIMS. Reguły operacyjne (egzekwowane przez agentów) żyją w `AI.md`
-(Rule #5, #16–#21). Ten plik wyjaśnia **jak system działa jako całość**.
+The canonical AIMS documentation. The operating rules (enforced by agents) live in `AI.md`
+(Rule #5, #16–#21). This file explains **how the system works as a whole**.
+
+A Polish translation is available in [`docs/i18n/pl/AIMS.md`](i18n/pl/AIMS.md).
 
 ---
 
-## 1. Czym jest AIMS i po co
+## 1. What AIMS is and why
 
-System pracy wielu agentów AI (claude / codex / opencode / gemini) na wielu maszynach (macOS, Linux),
-gdzie **każda jednostka pracy = gałąź git** (`ai/<session-id>`) w izolowanym worktree. Cel: równoległa
-praca bez konfliktów, pełna historia, przenośność między maszynami i agentami, odtwarzalność po awarii.
+A system for many AI agents (claude / codex / opencode / gemini) working on many machines (macOS, Linux),
+where **every unit of work = a git branch** (`ai/<session-id>`) in an isolated worktree. The goal:
+parallel work without conflicts, full history, portability between machines and agents, and
+recoverability after a failure.
 
-**Źródło prawdy: `origin` (GitHub).** Maszyny nie łączą się ze sobą — każda tylko **push/pull do origin**.
-Dlatego „nikt nie ma dostępu do Maca" NIE jest problemem: Mac wypycha do GitHuba, inne maszyny stamtąd
-ściągają. Sesja nie żyje „na maszynie X" — żyje na origin; maszyna to tylko miejsce ostatniego push.
+**Source of truth: `origin` (GitHub).** Machines do not connect to each other — each one only
+**pushes/pulls to origin**. That is why "nobody can reach the Mac" is NOT a problem: the Mac pushes to
+GitHub and the other machines pull from there. A session does not live "on machine X" — it lives on
+origin; a machine is only the place of the last push.
 
-## 2. Dwie warstwy — rozróżnienie fundamentalne
+## 2. Two layers — a fundamental distinction
 
-| Warstwa | Co to | Gdzie | Przenośna? |
+| Layer | What it is | Where | Portable? |
 |---|---|---|---|
-| **Praca** | gałąź `ai/<sid>`, worktree, pliki sesji, worklog, commity | origin (git) | ✅ TAK — każda maszyna, każdy agent |
-| **Kontekst agenta** | transkrypt/rozumowanie (np. `~/.claude/…jsonl`) | lokalnie, `.gitignore` | ❌ NIE — nieprzenośny, harness-specific |
+| **Work** | branch `ai/<sid>`, worktree, session files, worklog, commits | origin (git) | ✅ YES — any machine, any agent |
+| **Agent context** | transcript/reasoning (e.g. `~/.claude/…jsonl`) | local, `.gitignore` | ❌ NO — not portable, harness-specific |
 
-**Konsekwencja**: przejmując sesję, kontynuujesz z **ARTEFAKTÓW** (worklog + commity + plan), NIGDY
-z głowy poprzedniego agenta. Dlatego commity i worklog muszą być samowystarczalnym handoverem.
-`claude --resume` odtwarza warstwę B, ale to funkcja Claude Code, NIE mechanizm AIMS (nie działa
-dla codex/opencode/gemini, przywiązana do jednej maszyny).
+**Consequence**: when you take over a session, you continue from the **ARTIFACTS** (worklog + commits +
+plan), NEVER from the previous agent's head. That is why commits and the worklog must be a
+self-sufficient handover. `claude --resume` restores the context layer, but it is a Claude Code feature,
+NOT an AIMS mechanism (it does not work for codex/opencode/gemini and is tied to one machine).
 
-## 3. Cykl życia sesji
+## 3. Session lifecycle
 
 ```
-                    aims start <projekt> <temat> <agent> --scope repo:projekt,path:src
-                              │  (tworzy gałąź ai/<sid> + worktree z origin/main)
+                    aims start <project> <topic> <agent> --scope repo:project,path:src
+                              │  (creates branch ai/<sid> + worktree from origin/main)
                               ▼
-        ┌──────────────  PRACA w worktree  ──────────────┐
-        │  aims save  = checkpoint plików sesji + push   │  (można wielokrotnie)
+        ┌──────────────  WORK in the worktree  ──────────┐
+        │  aims save  = checkpoint session files + push  │  (may be repeated)
         └──────────────────────┬─────────────────────────┘
                                │
           ┌────────────────────┼─────────────────────────┐
           ▼                    ▼                          ▼
-   aims handoff         aims publish              (porzucenie)
-   „przekaż maszynę"     „zamknij, scal do main"    usuń gałąź
-   status=handoff        rejestr sNNN=done          bez merge
-   push KOMPLET          gałąź usunięta z origin
+   aims handoff         aims publish              (abandon)
+   "hand to a machine"  "close, merge to main"    delete the branch
+   status=handoff       registry sNNN=done        without merging
+   push EVERYTHING      branch deleted from origin
           │
           ▼
-   na DRUGIEJ maszynie:  aims adopt <sid>
-   (fetch z origin, worktree z istniejącej gałęzi, kontynuacja)
+   on the SECOND machine:  aims adopt <sid>
+   (fetch from origin, worktree from the existing branch, continue)
 ```
 
-## 4. Komendy
+## 4. Commands
 
-| Komenda | Gdzie uruchomić | Co robi |
+| Command | Where to run it | What it does |
 |---|---|---|
-| `aims start <projekt> <temat> [agent] --scope <csv>` | `$AIMS_HOME` | Nowa sesja z obowiązkowym scope; wykryte prawidłowe overlap-y są ostrzegane, ale nie blokują, natomiast malformed scope i błędy origin/Git/lease nadal blokują. |
-| `aims save` | w worktree | Checkpoint: `git add -A` (CAŁY worktree sesji — STATE.md, session-*.md, kod, artefakty) + commit + **push gdy ahead of origin**. Po naprawie 2026-07-18 nie gubi już plików projektu. |
-| `aims handoff [notka]` | w worktree | **Przekazanie maszyny** (polecenie USERA). `git add -A` (KOMPLET), commit, push, `status=handoff`. NIE scala do main. |
-| `aims handoff <sid>` | `$AIMS_HOME/.worktrees/` | Przekazanie jednej wskazanej lokalnej sesji bez ręcznego `cd` do jej katalogu. Waliduje, że worktree, branch `ai/<sid>` i metadata są zgodne, następnie wykonuje zwykły handoff. |
-| `aims handoff-all [--yes]` | `$AIMS_HOME` | Przekazanie wszystkich prawidłowych lokalnych worktree’ów. Domyślnie pyta o wpisanie `HANDOFF`; `--yes` jest dla świadomej automatyzacji. NIE scala, nie usuwa worktree’ów i nie force-pushuje. |
-| `aims checkpoint <sid>\|--all` | `$AIMS_HOME` | Bezpieczny checkpoint: skan sekretów, commit i push bez zmiany statusu sesji. Przeznaczony jako jawny cel dla user-level timera systemd lub LaunchAgent, bez samoczynnej instalacji usługi. |
-| `aims adopt <sid> [--remote]` | `$AIMS_HOME` (dowolna maszyna) | Przejęcie z origin: raport środowiska + guardy, worktree z istniejącej gałęzi, wpis ADOPTED. `--remote` = tylko raport. |
-| `aims publish <sid>` | `$AIMS_HOME` | Domknięcie: merge gałęzi → main, wpis rejestru `sNNN`, usunięcie gałęzi z origin. Działa niezależnie od tego, który agent zaczął. |
-| `aims list` | `$AIMS_HOME` | Aktywne gałęzie `ai/*` z wiekiem, scope i flagą STALE (>48h). |
+| `aims start <project> <topic> [agent] --scope <csv>` | `$AIMS_HOME` | New session with a mandatory scope; detected valid overlaps produce a warning but do not block, while a malformed scope and origin/Git/lease errors still block. |
+| `aims save` | in the worktree | Checkpoint: `git add -A` (the WHOLE session worktree — STATE.md, session-*.md, code, artifacts) + commit + **push when ahead of origin**. Since the 2026-07-18 fix it no longer loses project files. |
+| `aims handoff [note]` | in the worktree | **Hand over to another machine** (a USER command). `git add -A` (EVERYTHING), commit, push, `status=handoff`. Does NOT merge to main. |
+| `aims handoff <sid>` | `$AIMS_HOME/.worktrees/` | Hands over one named local session without a manual `cd` into its directory. Validates that the worktree, branch `ai/<sid>`, and metadata agree, then performs the normal handoff. |
+| `aims handoff-all [--yes]` | `$AIMS_HOME` | Hands over every valid local worktree. By default it asks you to type `HANDOFF`; `--yes` is for deliberate automation. Does NOT merge, does not remove worktrees, and does not force-push. |
+| `aims checkpoint <sid>\|--all` | `$AIMS_HOME` | Safe checkpoint: secret scan, commit, and push without changing the session status. Intended as an explicit target for a user-level systemd timer or LaunchAgent, without installing such a service by itself. |
+| `aims adopt <sid> [--remote]` | `$AIMS_HOME` (any machine) | Take over from origin: environment report + guards, worktree from the existing branch, ADOPTED entry. `--remote` = report only. |
+| `aims publish <sid>` | `$AIMS_HOME` | Closure: merge branch → main, registry entry `sNNN`, delete the branch from origin. Works regardless of which agent started it. |
+| `aims list` | `$AIMS_HOME` | Active `ai/*` branches with age, scope, and a STALE flag (>48h). |
 
-## 5. Blok `environment` — handover środowiska pracy
+## 5. The `environment` block — handing over the working environment
 
-`metadata.json` każdej sesji zawiera `environment`. Sesja dotykająca kodu (nie czysta analiza) MUSI go
-wypełnić — to jedyny sposób, by adoptujący agent wiedział, czego potrzebuje, zanim zacznie kodować:
+Every session's `metadata.json` contains `environment`. A session that touches code (not pure analysis)
+MUST fill it in — it is the only way for the adopting agent to know what it needs before it starts
+coding:
 
 ```json
 "environment": {
-  "code_repos": ["~/code/your-project"],  // repo kodu, ZWYKLE inne niż $AIMS_HOME
-  "toolchain":  [],                                            // tylko narzędzia potrzebne LOKALNIE
-  "exec_host":  "",                                            // host gdzie środowisko stoi; puste = przenośne
-  "setup":      "git pull",                                    // przygotowanie
-  "test":       "CI: GitHub Actions (PR)"                      // "local: <cmd>" LUB "CI: ..."
+  "code_repos": ["~/code/your-project"],  // code repos, USUALLY different from $AIMS_HOME
+  "toolchain":  [],                                            // only tools needed LOCALLY
+  "exec_host":  "",                                            // host where the environment lives; empty = portable
+  "setup":      "git pull",                                    // preparation
+  "test":       "CI: GitHub Actions (PR)"                      // "local: <cmd>" OR "CI: ..."
 }
 ```
 
-**Rozróżnienie `test: local` vs `CI` jest krytyczne.** Sesja może NIE mieć toolchainu lokalnie, bo
-weryfikuje przez CI (realny przypadek: kod Fluttera edytowany na hoście bez Fluttera, buildy zielone
-w GitHub Actions). `aims adopt` czyta ten blok, sonduje bieżący host (`command -v`) i rekomenduje
-adopcję lokalną vs zdalną (`--remote`) vs doinstalowanie.
+**The `test: local` vs `CI` distinction is critical.** A session may NOT have the toolchain locally
+because it verifies through CI (a real case: Flutter code edited on a host without Flutter, builds green
+in GitHub Actions). `aims adopt` reads this block, probes the current host (`command -v`), and
+recommends local adoption vs remote (`--remote`) vs installing the missing tools.
 
-## 6. Guardy i bezpieczeństwo
+## 6. Guards and safety
 
-- **Żywy pisarz** (`aims adopt`): lokalna adopcja wymaga `status=handoff`; prawidłowy overlap jest
-  tylko ostrzeżeniem diagnostycznym; po adopcji AIMS atomowo
-  przywraca `status=active`, więc drugi lokalny adopter jest odrzucony. `--remote` pozostaje tylko do odczytu.
-- **Granica origin** (`aims adopt`): raport mówi wprost, że pokazuje stan WYPCHNIĘTY — niewypchnięta
-  praca maszyny źródłowej nie jest widoczna. Dlatego przed przesiadką: `aims handoff` (push kompletu).
-- **Odmowa** (`aims adopt`): sesja scalona/usunięta → nie ma czego adoptować.
-- **Push na `main` zablokowany** hookiem `pre-push` — wyłącznie przez `aims publish`.
-- **`restore.sh` NIGDY z worktree** — tylko z kanonicznego `$AIMS_HOME` (uruchomienie z worktree zniszczyło
-  `$AIMS_HOME` 2026-07-15).
-- **`$AIMS_HOME` NIGDY nie kopiować** między maszynami — tylko `git clone` + `restore.sh` (kopia = ścieżki
-  obcej maszyny + cichy dryf).
-- **Sekrety**: do sesji NAZWA zmiennej i lokalizacja, NIGDY wartość (Rule #20). Sekrety w
-  `$AIMS_HOME/credentials/*.env` (gitignored). `validate-no-secrets.sh` skanuje też `.md`.
+- **Live writer** (`aims adopt`): local adoption requires `status=handoff`; a valid overlap is only a
+  diagnostic warning; after adoption AIMS atomically restores `status=active`, so a second local adopter
+  is rejected. `--remote` remains read-only.
+- **The origin boundary** (`aims adopt`): the report states plainly that it shows the PUSHED state —
+  unpushed work on the source machine is not visible. Hence, before switching machines: `aims handoff`
+  (push everything).
+- **Refusal** (`aims adopt`): a merged/deleted session → there is nothing to adopt.
+- **Push to `main` blocked** by the `pre-push` hook — only through `aims publish`.
+- **`restore.sh` NEVER from a worktree** — only from the canonical `$AIMS_HOME` (running it from a
+  worktree destroyed `$AIMS_HOME` on 2026-07-15).
+- **NEVER copy `$AIMS_HOME`** between machines — only `git clone` + `restore.sh` (a copy = another
+  machine's paths + silent drift).
+- **Secrets**: put the variable NAME and its location into a session, NEVER the value (Rule #20).
+  Secrets live in `$AIMS_HOME/credentials/*.env` (gitignored). `validate-no-secrets.sh` also scans `.md`.
 
-## 7. Reguły w AI.md (mapa)
+## 7. Rules in AI.md (map)
 
-| Rule | Temat |
+| Rule | Topic |
 |---|---|
-| #5 | Session Protocol — start/save/publish, izolacja worktree, konflikty scope |
-| #16 | Dokumentacja natychmiast po zmianie (inline: co, dlaczego, logika) |
-| #17 | Testy przed zamknięciem sesji (unit + integration + manual acceptance) |
-| #18 | Terminologia: „dokumentacja" vs „zapisz sesję" vs „zapisz i zamknij" — + „przekaż sesję" (handoff) |
-| #19 | Konwencje kodu i repo (build/lint/test, gałęzie, nazewnictwo) |
-| #20 | Sekrety — nazwa nie wartość; skaner widzi `.md` |
-| #21 | Adopcja/kontynuacja cudzej sesji — `aims adopt`; analiza środowiska; artefakty nie kontekst |
+| #5 | Session Protocol — start/save/publish, worktree isolation, scope conflicts |
+| #16 | Documentation immediately after a change (inline: what, why, logic) |
+| #17 | Tests before closing a session (unit + integration + manual acceptance) |
+| #18 | Terminology: "documentation" vs "save the session" vs "save and close" — + "hand over the session" (handoff) |
+| #19 | Code and repo conventions (build/lint/test, branches, naming) |
+| #20 | Secrets — the name, not the value; the scanner sees `.md` |
+| #21 | Adopting/continuing someone else's session — `aims adopt`; environment analysis; artifacts, not context |
 
-## 8. Wiring agentów (kto skąd czyta reguły)
+## 8. Agent wiring (who reads the rules from where)
 
-Wszystkie 4 agenty rozwiązują reguły do jednego `AI.md` (przez `restore.sh`):
+All 4 agents resolve their rules to a single `AI.md` (through `restore.sh`):
 
-| Agent | Entry-point | Mechanizm |
+| Agent | Entry point | Mechanism |
 |---|---|---|
 | claude | `~/.claude/CLAUDE.md` → `../AI.md` | symlink |
 | gemini | `~/.gemini/GEMINI.md` → `../AI.md` | symlink |
-| codex | `~/.codex/AGENTS.md` → `AI.md` | symlink global (NIE `~/AGENTS.md` — codex nie sięga wyżej niż korzeń projektu) |
+| codex | `~/.codex/AGENTS.md` → `AI.md` | global symlink (NOT `~/AGENTS.md` — codex does not look above the project root) |
 | opencode | `~/.claude/CLAUDE.md` (fallback) + `instructions:[~/AGENTS.md, ~/.claude/CLAUDE.md]` | config + fallback |
 
-`doctor.sh` weryfikuje, że każdy entry-point faktycznie rozwiązuje się do `AI.md` (realpath).
+`doctor.sh` verifies that every entry point actually resolves to `AI.md` (realpath).
