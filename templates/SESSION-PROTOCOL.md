@@ -3,60 +3,60 @@
 **Version**: 4.2
 **Last Updated**: 2026-07-04
 **Author**: The AIMS authors
-**Rename**: 2026-07-03 system przemianowany z SMS na AIMS; stare komendy `sms-*` działają jako aliasy `aims *`
-**v4.2 (2026-07-04)**: `--scope` w aims start, wiek+scope w aims list, auto-wiersz rejestru w aims publish, pre-push guard na main, podział CONTEXT.md (rdzeń + `context/ARCHIVE-*`)
+**Rename**: 2026-07-03 the system was renamed from SMS to AIMS; the old `sms-*` commands work as aliases of `aims *`
+**v4.2 (2026-07-04)**: `--scope` in aims start, age+scope in aims list, automatic registry row in aims publish, pre-push guard on main, CONTEXT.md split (core + `context/ARCHIVE-*`)
 
-## Zasada główna
+## Core principle
 
-AIMS v4 używa Git branches/worktrees zamiast markerów `.active`. Dirty `$AIMS_HOME` nigdy nie blokuje rozpoczęcia innej pracy. Agent pracuje w osobnym checkoutcie `$AIMS_HOME/.worktrees/<session-id>/` na branchu `ai/<session-id>` i często commit+pushuje swój branch.
+AIMS v4 uses Git branches/worktrees instead of `.active` markers. A dirty `$AIMS_HOME` never blocks starting other work. The agent works in a separate checkout `$AIMS_HOME/.worktrees/<session-id>/` on the branch `ai/<session-id>` and commits+pushes its branch often.
 
-## Gdzie jest checkout agenta
+## Where the agent's checkout is
 
 ```text
-$AIMS_HOME/                         # main checkout, stabilna pamięć
-$AIMS_HOME/.worktrees/<session-id>/  # checkout agenta, branch ai/<session-id>
+$AIMS_HOME/                         # main checkout, stable memory
+$AIMS_HOME/.worktrees/<session-id>/  # agent checkout, branch ai/<session-id>
 ```
 
-## Aktywna sesja
+## Active session
 
-Aktywna sesja = istnieje remote branch `origin/ai/<session-id>`.
+Active session = the remote branch `origin/ai/<session-id>` exists.
 
-Nie ma obowiązkowych markerów `.active`. Obecność i scope sesji są w:
+There are no mandatory `.active` markers. Session presence and scope live in:
 
 ```text
 sessions/work/<session-id>/metadata.json
 ```
 
-## Start sesji
+## Session start
 
 ```bash
 cd $AIMS_HOME
-aims start <project> <topic> <agent> --scope host:server1,repo:my-repo   # scope obowiązkowy
+aims start <project> <topic> <agent> --scope host:server1,repo:my-repo   # scope is mandatory
 ```
 
-Skrypt:
-1. tworzy `session-id`,
-2. tworzy branch `ai/<session-id>` z `origin/main`,
-3. tworzy worktree `$AIMS_HOME/.worktrees/<session-id>/`,
-4. tworzy `sessions/work/<session-id>/metadata.json` (z podanym `scope`),
-5. commit+pushuje branch agenta.
+The script:
+1. creates a `session-id`,
+2. creates the branch `ai/<session-id>` from `origin/main`,
+3. creates the worktree `$AIMS_HOME/.worktrees/<session-id>/`,
+4. creates `sessions/work/<session-id>/metadata.json` (with the given `scope`),
+5. commits+pushes the agent's branch.
 
-Po starcie agent przechodzi do worktree i pracuje tylko tam.
+After the start the agent moves into the worktree and works only there.
 
-**⚠️ Dyscyplina cwd**: KAŻDA komenda edytująca pliki sesji musi być uruchamiana w worktree
-(ścieżki bezwzględne albo jawne `cd` w tej samej komendzie). Edycja w `$AIMS_HOME` na main = błąd;
-pre-push guard zablokuje push, ale nie edycję.
+**⚠️ cwd discipline**: EVERY command that edits session files must run in the worktree
+(absolute paths or an explicit `cd` in the same command). Editing in `$AIMS_HOME` on main is an error;
+the pre-push guard will block the push, but not the edit.
 
-## Czytanie pamięci na start (progressive loading)
+## Reading memory at start (progressive loading)
 
-1. `CONTEXT.md` — TYLKO rdzeń (~20 KB): mandaty + ostatnie wpisy + tabela "jak doczytać więcej"
-2. `<project>/STATE.md` — stan i TODOs twojego projektu (obowiązkowe)
-3. `context/ARCHIVE-*.md` — starsza historia, TYLKO gdy temat sesji tego wymaga: `grep -il '<temat>' $AIMS_HOME/context/`
-4. NIE ładuj całych archiwów ani starych sesji "na zapas".
+1. `CONTEXT.md` — ONLY the core (~20 KB): mandates + latest entries + a "how to load more" table
+2. `<project>/STATE.md` — state and TODOs of your project (mandatory)
+3. `context/ARCHIVE-*.md` — older history, ONLY when the session topic requires it: `grep -il '<topic>' $AIMS_HOME/context/`
+4. Do NOT load whole archives or old sessions "just in case".
 
-## Praca w trakcie sesji
+## Work during the session
 
-Agent zapisuje bieżące informacje w:
+The agent records current information in:
 
 ```text
 sessions/work/<session-id>/
@@ -68,75 +68,75 @@ sessions/work/<session-id>/
 └── final-summary.md
 ```
 
-Zapis bieżący:
+Checkpoint:
 
 ```bash
 ./scripts/aims save
 ```
 
-`aims save` commit+pushuje branch `ai/<session-id>`. Nie dotyka main.
+`aims save` commits+pushes the branch `ai/<session-id>`. It does not touch main.
 
-## Zakończenie sesji
+## Session end
 
-Agent uzupełnia `final-summary.md`, opcjonalnie aktualizuje właściwe `STATE.md`, `SESSIONS.md`, `CONTEXT.md` w swoim branchu, potem publikuje:
+The agent completes `final-summary.md`, optionally updates the relevant `STATE.md`, `SESSIONS.md`, `CONTEXT.md` in its branch, then publishes:
 
 ```bash
 cd $AIMS_HOME
 ./scripts/aims publish <session-id>
 ```
 
-Skrypt publikuje przez osobny publish-worktree, robi merge branchu `ai/<session-id>` do `main`,
-**automatycznie dopisuje wiersz rejestru do `SESSIONS.md`** (kolejny `sNNN` liczony na zmergowanym
-drzewie — NIE dodawaj wiersza ręcznie), pushuje `main` (z `AIMS_PUBLISH=1` dla pre-push guarda),
-usuwa remote branch i lokalne worktree.
+The script publishes through a separate publish worktree, merges the branch `ai/<session-id>` into `main`,
+**automatically appends the registry row to `SESSIONS.md`** (the next `sNNN` is computed on the merged
+tree — do NOT add the row by hand), pushes `main` (with `AIMS_PUBLISH=1` for the pre-push guard),
+deletes the remote branch and the local worktree.
 
-Przy konflikcie merge skrypt sprząta po sobie i wypisuje instrukcję: w swoim worktree
-`git fetch origin main && git rebase origin/main`, rozwiąż konflikty, `aims save`, ponów publish.
+On a merge conflict the script cleans up after itself and prints instructions: in your worktree
+`git fetch origin main && git rebase origin/main`, resolve the conflicts, `aims save`, retry publish.
 
-## Higiena sesji
+## Session hygiene
 
-- `aims list` pokazuje wiek każdej sesji i flaguje `⚠️ STALE(>48h)` — takie sesje opublikuj albo usuń
+- `aims list` shows the age of each session and flags `⚠️ STALE(>48h)` — publish or delete such sessions
   (`git push origin --delete ai/<sid>` + `git worktree remove`).
-- Pre-push guard: `./scripts/aims install-hooks` instaluje hook blokujący bezpośredni push na `main`
-  (wspólny dla wszystkich worktree). Po klonie/restore uruchom raz.
-- `CONTEXT.md` rdzeń: max ~20 KB / 10 wpisów; najstarsze wpisy przenoś 1:1 do `context/ARCHIVE-<rok>-H<n>.md`.
-  Zakaz wklejania dumpów komend i treści per-projekt (te → `<project>/STATE.md`).
+- Pre-push guard: `./scripts/aims install-hooks` installs a hook that blocks a direct push to `main`
+  (shared by all worktrees). Run it once after a clone/restore.
+- `CONTEXT.md` core: max ~20 KB / 10 entries; move the oldest entries 1:1 to `context/ARCHIVE-<year>-H<n>.md`.
+  Do not paste command dumps or per-project content (those → `<project>/STATE.md`).
 
-## Konflikty
+## Conflicts
 
-Nie blokuje:
-- dirty `$AIMS_HOME`,
-- aktywny branch innego agenta,
-- nieopublikowana sesja innego agenta,
-- ten sam projekt bez overlapping scope;
-- prawidłowo wykryty overlapping scope — AIMS wypisuje `WARN` i kontynuuje po serializacji admission.
+Not blocking:
+- a dirty `$AIMS_HOME`,
+- another agent's active branch,
+- another agent's unpublished session,
+- the same project without an overlapping scope;
+- a validly detected overlapping scope — AIMS prints a `WARN` and continues after admission serialization.
 
-Diagnostyka może wskazać ten sam host, VM/CT, repo kodu/IaC, plik, usługę lub publiczny dokument, ale
-prawidłowo wykryty overlap jest doradczy — nie zatrzymuj się tylko z tego powodu. Blokuje nadal:
-- malformed scope,
-- awaria origin/Git/lease albo nieweryfikowalny recheck,
-- adoption sesji bez `status=handoff` (poza jawnie read-only `--remote`).
+Diagnostics may point to the same host, VM/CT, code/IaC repo, file, service or public document, but
+a validly detected overlap is advisory — do not stop for that reason alone. Still blocking:
+- a malformed scope,
+- an origin/Git/lease failure or an unverifiable recheck,
+- adopting a session without `status=handoff` (except the explicitly read-only `--remote`).
 
-## Lista aktywnych sesji
+## Listing active sessions
 
 ```bash
 cd $AIMS_HOME
 ./scripts/aims list
 ```
 
-## Reguły plików
+## File rules
 
-- `$AIMS_HOME` na `main` służy do czytania i publikacji końcowej.
-- Agent nie pracuje w checkoutcie `$AIMS_HOME` na main.
-- Agent pracuje w `$AIMS_HOME/.worktrees/<session-id>/`.
-- `.worktrees/` jest ignorowane przez git.
-- W trakcie pracy agent preferuje własny katalog `sessions/work/<session-id>/`.
-- Wspólne pliki (`STATE.md`, `SESSIONS.md`, `CONTEXT.md`) aktualizuje dopiero pod koniec sesji w swoim branchu.
+- `$AIMS_HOME` on `main` is for reading and the final publication.
+- The agent does not work in the `$AIMS_HOME` checkout on main.
+- The agent works in `$AIMS_HOME/.worktrees/<session-id>/`.
+- `.worktrees/` is ignored by git.
+- During work the agent prefers its own directory `sessions/work/<session-id>/`.
+- Shared files (`STATE.md`, `SESSIONS.md`, `CONTEXT.md`) are updated only at the end of the session, in the agent's branch.
 
-## Kompatybilność
+## Compatibility
 
-Stare `.active/.done` markery są legacy i nie blokują pracy. `scripts/session-preflight` jest legacy helperem i nie może blokować rozpoczęcia pracy w AIMS v4.
+The old `.active/.done` markers are legacy and do not block work. `scripts/session-preflight` is a legacy helper and must not block starting work in AIMS v4.
 
-Komendy `scripts/sms-start`, `sms-save`, `sms-publish`, `sms-list` to aliasy legacy (od 2026-07-03) wywołujące odpowiedniki `aims *` — agenci ze starymi instrukcjami nadal działają. Nowe instrukcje używają wyłącznie `aims *`.
+The commands `scripts/sms-start`, `sms-save`, `sms-publish`, `sms-list` are legacy aliases (since 2026-07-03) that call their `aims *` counterparts — agents with old instructions still work. New instructions use only `aims *`.
 
-**Remember**: branch jest sesją. Worktree jest checkoutem agenta. Main nie jest miejscem pracy aktywnego agenta.
+**Remember**: the branch is the session. The worktree is the agent's checkout. Main is not a place for an active agent to work.
